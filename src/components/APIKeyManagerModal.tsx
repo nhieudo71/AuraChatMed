@@ -23,11 +23,13 @@ import {
   Zap,
   Activity,
   RotateCcw,
+  FileText,
 } from 'lucide-react';
 import { CustomProviderConfig, UserPreferences } from '../types';
 import { AI_SERVICES_CATALOG, AIServiceInfo } from '../data/apiServicesCatalog';
 import { encryptApiKey, decryptApiKey } from '../utils/crypto';
 import { createBackupPayload, parseApiKeysBackup, downloadBackupFile } from '../utils/backupUtils';
+import { planEnvImport, buildProvidersFromPlan, ImportPlan } from '../lib/envImporter';
 import { FAST_MODEL, THINKING_MODEL } from '../config/appConfig';
 import { requestApi } from '../lib/apiClient';
 
@@ -93,6 +95,13 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
   // Backup & Restore
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [backupMsg, setBackupMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Import .env: luôn xem trước rồi mới ghi, để không đè cấu hình đang có.
+  const envInputRef = useRef<HTMLInputElement>(null);
+  const [envPlan, setEnvPlan] = useState<ImportPlan | null>(null);
+  const [envSelected, setEnvSelected] = useState<Set<string>>(new Set());
+  const [envFileName, setEnvFileName] = useState('');
+  const [isImportingEnv, setIsImportingEnv] = useState(false);
 
   if (!isOpen) return null;
 
@@ -441,8 +450,94 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
     e.target.value = '';
   };
 
-  const currentCategoryProviders = providers.filter((p) => p.category === activeTab);
-  const isDefaultGeminiActive =
+  /**
+   * Đọc tệp .env và hiện bảng xem trước. Chưa ghi gì vào danh sách provider —
+   * người dùng tự bỏ tick những dịch vụ không muốn nhập.
+   */
+  const handleEnvFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setEnvFileName(file.name);
+    setBackupMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = (event.target?.result as string) || '';
+        const plan = planEnvImport(text);
+
+        if (!plan.candidates.length) {
+          const hint = plan.unknown.length
+            ? `Tìm thấy ${plan.unknown.length} biến nhưng không khớp dịch vụ nào trong danh mục (ví dụ: ${plan.unknown
+                .slice(0, 3)
+                .map((u) => u.key)
+                .join(', ')}).`
+            : 'Tệp không có dòng nào dạng KEY=value.';
+          setBackupMsg({ type: 'error', text: `Không nhập được dịch vụ nào. ${hint}` });
+          setEnvPlan(null);
+          return;
+        }
+
+        setEnvPlan(plan);
+        // Mặc định chọn tất cả, trừ dịch vụ đã có sẵn trong danh sách.
+        const existing = new Set(providers.map((p) => p.name));
+        setEnvSelected(new Set(plan.candidates.filter((c) => !existing.has(c.name)).map((c) => c.serviceId)));
+      } catch (err: any) {
+        setBackupMsg({ type: 'error', text: err.message || 'Lỗi đọc tệp .env' });
+        setEnvPlan(null);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const toggleEnvCandidate = (serviceId: string) => {
+    setEnvSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(serviceId)) next.delete(serviceId);
+      else next.add(serviceId);
+      return next;
+    });
+  };
+
+  const handleConfirmEnvImport = async () => {
+    if (!envPlan || envSelected.size === 0) return;
+    setIsImportingEnv(true);
+
+    try {
+      const built = await buildProvidersFromPlan(envPlan, Array.from(envSelected));
+      if (!built.length) {
+        setBackupMsg({ type: 'error', text: 'Không có dịch vụ nào được chọn để nhập.' });
+        return;
+      }
+
+      // Giữ provider cũ; dịch vụ trùng tên thì thay bằng bản mới nhập.
+      const importedNames = new Set(built.map((p) => p.name));
+      const merged = [...providers.filter((p) => !importedNames.has(p.name)), ...built];
+      onSaveProviders(merged);
+
+      // Tự kích hoạt dịch vụ LLM đầu tiên nếu hiện chưa chọn provider nào.
+      const firstLlm = built.find((p) => p.category === 'llm');
+      if (firstLlm && (!preferences.activeProviderId || preferences.activeProviderId === 'default')) {
+        onUpdatePreferences({ activeProviderId: firstLlm.id });
+      }
+
+      setBackupMsg({
+        type: 'success',
+        text: `Đã nhập ${built.length} dịch vụ từ ${envFileName}. Chuyển sang tab tương ứng để test kết nối.`,
+      });
+      setEnvPlan(null);
+      setEnvFileName('');
+      setTimeout(() => setBackupMsg(null), 6000);
+    } catch (err: any) {
+      setBackupMsg({ type: 'error', text: err.message || 'Lỗi mã hóa khóa khi nhập' });
+    } finally {
+      setIsImportingEnv(false);
+    }
+  };
+
+  const currentCategoryProviders = providers.filter((p) => p.category === activeTab);  const isDefaultGeminiActive =
     activeTab === 'llm' && (!preferences.activeProviderId || preferences.activeProviderId === 'default');
 
   return (
@@ -1224,9 +1319,142 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
         </div>
 
         {/* Footer with Backup & Restore Buttons */}
-        <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/80 flex flex-col gap-3">
+          {/* Xem trước khi nhập tệp .env */}
+          {envPlan && (
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-xs font-bold text-stone-900 dark:text-stone-100 flex items-center gap-1.5">
+                    <Key size={13} className="text-amber-500" />
+                    <span>Xem trước tệp {envFileName}</span>
+                  </div>
+                  <p className="text-[13px] text-stone-500 dark:text-stone-400 mt-0.5">
+                    Tìm thấy <b>{envPlan.candidates.length}</b> dịch vụ nhập được · đã chọn{' '}
+                    <b>{envSelected.size}</b>. Bỏ tick những dịch vụ bạn không muốn thêm.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setEnvPlan(null);
+                    setEnvFileName('');
+                  }}
+                  className="p-1 rounded-lg text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors cursor-pointer shrink-0"
+                  title="Hủy nhập"
+                  aria-label="Hủy nhập tệp .env"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                {envPlan.candidates.map((candidate) => {
+                  const isSelected = envSelected.has(candidate.serviceId);
+                  const modelCount = candidate.models.length;
+                  return (
+                    <label
+                      key={candidate.serviceId}
+                      className={`flex items-center gap-2.5 p-2 rounded-xl border cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'border-amber-500/40 bg-white dark:bg-stone-900'
+                          : 'border-stone-200 dark:border-stone-800 bg-transparent'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleEnvCandidate(candidate.serviceId)}
+                        className="w-4 h-4 rounded accent-amber-500 cursor-pointer shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-semibold text-stone-900 dark:text-stone-100">
+                            {candidate.name}
+                          </span>
+                          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-stone-500/10 text-stone-500 dark:text-stone-400 font-mono">
+                            {candidate.envKey}
+                          </span>
+                          <span className="text-[11px] text-stone-400">
+                            {modelCount} model
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-stone-400 truncate">
+                          {candidate.baseUrl} · {candidate.selectedModel}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {envPlan.unknown.length > 0 && (
+                <div className="text-[12px] text-stone-500 dark:text-stone-400 bg-stone-200/40 dark:bg-stone-800/40 rounded-xl px-2.5 py-2 leading-relaxed">
+                  <b>{envPlan.unknown.length} biến chưa nhận diện được:</b>{' '}
+                  <span className="font-mono">{envPlan.unknown.map((u) => u.key).join(', ')}</span>. Thêm thủ công ở ô
+                  bên dưới nếu cần.
+                </div>
+              )}
+
+              {envPlan.skipped.length > 0 && (
+                <details className="text-[12px] text-stone-500 dark:text-stone-400">
+                  <summary className="cursor-pointer select-none">
+                    {envPlan.skipped.length} biến bị bỏ qua — xem lý do
+                  </summary>
+                  <ul className="mt-1 pl-4 list-disc space-y-0.5">
+                    {envPlan.skipped.map((s) => (
+                      <li key={`${s.entry.key}-${s.entry.line}`}>
+                        <span className="font-mono">{s.entry.key}</span> — {s.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={handleConfirmEnvImport}
+                  disabled={isImportingEnv || envSelected.size === 0}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  {isImportingEnv ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
+                  <span>Nhập {envSelected.size} dịch vụ</span>
+                </button>
+                <button
+                  onClick={() => setEnvSelected(new Set(envPlan.candidates.map((c) => c.serviceId)))}
+                  className="text-[12px] text-stone-500 dark:text-stone-400 hover:underline cursor-pointer"
+                >
+                  Chọn tất cả
+                </button>
+                <button
+                  onClick={() => setEnvSelected(new Set())}
+                  className="text-[12px] text-stone-500 dark:text-stone-400 hover:underline cursor-pointer"
+                >
+                  Bỏ chọn
+                </button>
+              </div>
+            </div>
+          )}
+
+          {backupMsg && (
+            <div
+              className={`flex items-start gap-2 text-xs p-2.5 rounded-xl border ${
+                backupMsg.type === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-rose-500/10 border-rose-500/25 text-rose-700 dark:text-rose-400'
+              }`}
+            >
+              {backupMsg.type === 'success' ? (
+                <CheckCircle2 size={14} className="shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+              )}
+              <span className="leading-relaxed">{backupMsg.text}</span>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Backup / Restore */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <button
               onClick={handleExportBackup}
               className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 hover:bg-stone-200/60 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 text-xs font-medium transition-colors cursor-pointer"
@@ -1251,14 +1479,31 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
               accept=".json"
               className="hidden"
             />
+
+            <button
+              onClick={() => envInputRef.current?.click()}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white text-white dark:text-stone-900 text-xs font-semibold transition-colors cursor-pointer"
+              title="Nhập nhiều khóa API cùng lúc từ tệp .env"
+            >
+              <FileText size={13} />
+              <span>Nhập tệp .env</span>
+            </button>
+            <input
+              type="file"
+              ref={envInputRef}
+              onChange={handleEnvFileSelected}
+              accept=".env,.txt,text/plain,env"
+              className="hidden"
+            />
           </div>
 
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white text-white dark:text-stone-900 text-xs font-semibold shadow-xs transition-colors"
+            className="w-full sm:w-auto px-5 py-2 rounded-xl border border-stone-300 dark:border-stone-700 hover:bg-stone-200/60 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 text-xs font-semibold transition-colors cursor-pointer"
           >
             Đóng
           </button>
+          </div>
         </div>
       </div>
     </div>
