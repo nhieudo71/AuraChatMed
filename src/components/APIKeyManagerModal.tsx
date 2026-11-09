@@ -28,6 +28,8 @@ import { CustomProviderConfig, UserPreferences } from '../types';
 import { AI_SERVICES_CATALOG, AIServiceInfo } from '../data/apiServicesCatalog';
 import { encryptApiKey, decryptApiKey } from '../utils/crypto';
 import { createBackupPayload, parseApiKeysBackup, downloadBackupFile } from '../utils/backupUtils';
+import { FAST_MODEL, THINKING_MODEL } from '../config/appConfig';
+import { requestApi } from '../lib/apiClient';
 
 interface APIKeyManagerModalProps {
   isOpen: boolean;
@@ -122,13 +124,9 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
       cleanBaseUrl = cleanBaseUrl.slice(0, -'/chat/completions'.length).replace(/\/+$/, '');
     }
 
-    const resp = await fetch('/api/models/fetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: cleanBaseUrl,
-        apiKey: targetKey.trim(),
-      }),
+    const resp = await requestApi('/api/models/fetch', {
+      baseUrl: cleanBaseUrl,
+      apiKey: targetKey.trim(),
     });
 
     const text = await resp.text();
@@ -320,11 +318,11 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
     try {
       let cleanApiKey = '';
       let cleanBaseUrl = '';
-      let testModel = 'gemini-3.8-flash';
+      let testModel = FAST_MODEL;
       let category = 'llm';
 
       if (isDefaultGemini) {
-        testModel = 'gemini-3.8-flash';
+        testModel = FAST_MODEL;
         category = 'llm';
       } else if (prov) {
         category = prov.category;
@@ -335,15 +333,11 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
         }
       }
 
-      const resp = await fetch('/api/models/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          baseUrl: cleanBaseUrl,
-          apiKey: cleanApiKey,
-          model: testModel,
-          category,
-        }),
+      const resp = await requestApi('/api/models/test', {
+        baseUrl: cleanBaseUrl,
+        apiKey: cleanApiKey,
+        model: testModel,
+        category,
       });
 
       const text = await resp.text();
@@ -463,7 +457,7 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
             <div>
               <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100 flex items-center gap-2">
                 <span>Quản lý Đa Dịch Vụ Khóa API</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                <span className="text-[13px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
                   AES-256 mã hóa
                 </span>
               </h3>
@@ -581,13 +575,13 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                         <div className="text-xs font-bold text-stone-900 dark:text-stone-100 flex items-center gap-1.5">
                           <span>Google Gemini (Tích hợp hệ thống)</span>
                           {isDefaultGeminiActive && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-white font-semibold">
+                            <span className="text-[13px] px-2 py-0.5 rounded-full bg-amber-500 text-white font-semibold">
                               Đang dùng làm mặc định
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                          Mô hình tốc độ cao gemini-3.8-flash & mô hình suy luận chuyên sâu gemini-4-argon
+                        <p className="text-[14px] text-stone-500 dark:text-stone-400">
+                          Mô hình tốc độ cao {FAST_MODEL} & mô hình suy luận chuyên sâu {THINKING_MODEL}
                         </p>
                       </div>
                     </div>
@@ -620,9 +614,9 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
 
                   {/* Test latency badge for default Gemini */}
                   {testResults['default_gemini'] && (
-                    <div className="mt-2 pt-2 border-t border-stone-200/60 dark:border-stone-800 text-[11px] flex items-center gap-2">
+                    <div className="mt-2 pt-2 border-t border-stone-200/60 dark:border-stone-800 text-[14px] flex items-center gap-2">
                       <span
-                        className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold ${
+                        className={`px-2 py-0.5 rounded-full font-mono text-[13px] font-semibold ${
                           testResults['default_gemini'].success
                             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                             : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
@@ -649,7 +643,7 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                   </h4>
                   <button
                     onClick={() => setSubView('catalog')}
-                    className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+                    className="text-[14px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
                   >
                     <span>Xem danh mục 100+ dịch vụ có sẵn</span>
                     <ExternalLink size={11} />
@@ -679,7 +673,7 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                       value={baseUrl}
                       onChange={(e) => setBaseUrl(e.target.value)}
                       placeholder="https://api.groq.com/openai/v1 hoặc http://localhost:11434/v1"
-                      className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 font-mono text-[11px] focus:outline-none focus:border-amber-500"
+                      className="w-full p-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 font-mono text-[14px] focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
@@ -775,7 +769,7 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                   <h4 className="text-xs font-bold text-stone-900 dark:text-stone-100 uppercase tracking-wider">
                     Dịch vụ đã cấu hình ({currentCategoryProviders.length})
                   </h4>
-                  <span className="text-[11px] text-stone-500 dark:text-stone-400">
+                  <span className="text-[14px] text-stone-500 dark:text-stone-400">
                     Tùy chọn Chỉnh sửa, Test kết nối, Thêm model & Đổi mặc định
                   </span>
                 </div>
@@ -944,16 +938,16 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                                       {prov.name}
                                     </span>
                                     {isDefaultActive ? (
-                                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-white font-semibold">
+                                      <span className="text-[13px] px-2 py-0.5 rounded-full bg-amber-500 text-white font-semibold">
                                         Đang dùng làm mặc định
                                       </span>
                                     ) : (
-                                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400">
+                                      <span className="text-[13px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400">
                                         {prov.category.toUpperCase()}
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-[11px] font-mono text-stone-400 truncate max-w-sm mt-0.5">
+                                  <div className="text-[14px] font-mono text-stone-400 truncate max-w-sm mt-0.5">
                                     {prov.baseUrl}
                                   </div>
                                 </div>
@@ -1030,10 +1024,10 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
 
                               {/* Test Result Display */}
                               {testInfo && (
-                                <div className="mt-2 mb-2 p-2 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/80 dark:border-stone-700/80 text-[11px] flex items-center justify-between gap-2">
+                                <div className="mt-2 mb-2 p-2 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/80 dark:border-stone-700/80 text-[14px] flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 overflow-hidden">
                                     <span
-                                      className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold shrink-0 ${
+                                      className={`px-2 py-0.5 rounded-full font-mono text-[13px] font-semibold shrink-0 ${
                                         testInfo.success
                                           ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                                           : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
@@ -1091,16 +1085,16 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                                 <div>
                                   {deleteConfirmId === prov.id ? (
                                     <div className="flex items-center gap-1 animate-in fade-in">
-                                      <span className="text-[10px] text-red-500 font-semibold">Xóa vĩnh viễn?</span>
+                                      <span className="text-[13px] text-red-500 font-semibold">Xóa vĩnh viễn?</span>
                                       <button
                                         onClick={() => handleDeleteProvider(prov.id)}
-                                        className="px-2 py-0.5 rounded-lg bg-red-600 text-white font-semibold text-[10px]"
+                                        className="px-2 py-0.5 rounded-lg bg-red-600 text-white font-semibold text-[13px]"
                                       >
                                         Đồng ý
                                       </button>
                                       <button
                                         onClick={() => setDeleteConfirmId(null)}
-                                        className="px-1.5 py-0.5 rounded-lg text-stone-400 hover:text-stone-600 text-[10px]"
+                                        className="px-1.5 py-0.5 rounded-lg text-stone-400 hover:text-stone-600 text-[13px]"
                                       >
                                         Hủy
                                       </button>
@@ -1176,7 +1170,7 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                           {item.name}
                         </span>
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                          className={`text-[13px] px-2 py-0.5 rounded-full font-semibold border ${
                             item.tier === 'free'
                               ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                               : item.tier === 'freemium'
@@ -1188,11 +1182,17 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                         </span>
                       </div>
 
-                      <p className="text-[11px] text-stone-500 dark:text-stone-400 line-clamp-2 leading-relaxed mb-2">
+                      <p className="text-[14px] text-stone-500 dark:text-stone-400 line-clamp-2 leading-relaxed mb-2">
                         {item.description}
                       </p>
 
-                      <div className="text-[10px] font-mono text-stone-400 bg-stone-50 dark:bg-stone-800/60 p-1.5 rounded-lg truncate mb-2">
+                      {item.openAiCompatible === false && (
+                        <div className="text-[13px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2 py-1.5 mb-2 leading-relaxed">
+                          API riêng, không theo chuẩn OpenAI — gọi <code className="font-mono">/chat/completions</code> sẽ lỗi 404.
+                        </div>
+                      )}
+
+                      <div className="text-[13px] font-mono text-stone-400 bg-stone-50 dark:bg-stone-800/60 p-1.5 rounded-lg truncate mb-2">
                         {item.baseUrl}
                       </div>
                     </div>
@@ -1202,7 +1202,7 @@ export const APIKeyManagerModal: React.FC<APIKeyManagerModalProps> = ({
                         href={item.docsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                        className="text-[14px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
                       >
                         <span>Nhận API Key</span>
                         <ExternalLink size={10} />

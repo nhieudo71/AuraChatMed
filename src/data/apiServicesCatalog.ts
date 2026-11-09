@@ -1,3 +1,6 @@
+import { FAST_MODEL, THINKING_MODEL, TRANSCRIBE_MODEL } from '../config/appConfig';
+import { EXTRA_AI_SERVICES } from './apiServicesCatalogExtra';
+
 export interface AIServiceInfo {
   id: string;
   name: string;
@@ -10,9 +13,16 @@ export interface AIServiceInfo {
   defaultModel: string;
   models: string[];
   description: string;
+  /**
+   * `false` khi dịch vụ KHÔNG dùng chuẩn OpenAI (/chat/completions).
+   * Ví dụ AI Horde dùng API hàng đợi riêng: gọi `/chat/completions` sẽ trả 404
+   * HTML. Giao diện dựa vào cờ này để cảnh báo thay vì để người dùng gặp lỗi
+   * khó hiểu. Bỏ trống = `true` (mặc định coi là tương thích).
+   */
+  openAiCompatible?: boolean;
 }
 
-export const AI_SERVICES_CATALOG: AIServiceInfo[] = [
+const CORE_AI_SERVICES: AIServiceInfo[] = [
   // ================= 1. LLM & CHAT REASONING SERVICES =================
   {
     id: 'google-gemini',
@@ -22,8 +32,8 @@ export const AI_SERVICES_CATALOG: AIServiceInfo[] = [
     tierLabel: 'Miễn phí + Trả phí',
     baseUrl: 'https://generativelanguage.googleapis.com',
     docsUrl: 'https://aistudio.google.com/app/apikey',
-    defaultModel: 'gemini-3.8-flash',
-    models: ['gemini-3.8-flash', 'gemini-4-argon', 'gemini-3.1-flash-lite', 'gemini-3.5-transcribe'],
+    defaultModel: FAST_MODEL,
+    models: [FAST_MODEL, THINKING_MODEL, 'gemini-3.1-flash-lite', TRANSCRIBE_MODEL],
     description: 'Mô hình siêu việt của Google với độ chính xác cao, context window 1M+ token và tốc độ truyền phát cực nhanh.'
   },
   {
@@ -781,3 +791,21 @@ export const AI_SERVICES_CATALOG: AIServiceInfo[] = [
     description: 'Các API tiện ích hình ảnh: phục chế ảnh cũ trắng đen, biến ảnh thành tranh vẽ và tạo ảnh AI.'
   }
 ];
+
+/**
+ * Danh mục đầy đủ: các dịch vụ cốt lõi (CORE_AI_SERVICES) cộng danh mục mở
+ * rộng (EXTRA_AI_SERVICES). Lọc trùng theo `id` để một dịch vụ xuất hiện ở cả
+ * hai nơi không bị nhân đôi trong giao diện.
+ */
+export const AI_SERVICES_CATALOG: AIServiceInfo[] = (() => {
+  const seen = new Set<string>();
+  const merged: AIServiceInfo[] = [];
+
+  for (const service of [...CORE_AI_SERVICES, ...EXTRA_AI_SERVICES]) {
+    if (seen.has(service.id)) continue;
+    seen.add(service.id);
+    merged.push(service);
+  }
+
+  return merged;
+})();

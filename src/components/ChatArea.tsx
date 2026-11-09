@@ -25,15 +25,34 @@ import { ChatMessage, ChatAttachment } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { formatFileSize } from '../utils/fileParser';
 
+interface StreamMetrics {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  source: 'provider' | 'estimate';
+  elapsedMs: number;
+}
+
 interface ChatAreaProps {
   messages: ChatMessage[];
   isStreaming: boolean;
   streamingMessage: string;
   streamingThinking?: string;
+  streamMetrics?: StreamMetrics | null;
+  streamStartedAt?: number | null;
   onSelectStarterPrompt: (prompt: string) => void;
   systemPrompt?: string;
   ttsVoice?: string;
   activeModelName?: string;
+}
+
+/** 13993 → "00:00:13". Quá 1 giờ vẫn hiển thị đủ hh:mm:ss. */
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -41,6 +60,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   isStreaming,
   streamingMessage,
   streamingThinking,
+  streamMetrics,
+  streamStartedAt,
   onSelectStarterPrompt,
   systemPrompt,
   ttsVoice,
@@ -51,6 +72,28 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [expandedThinking, setExpandedThinking] = useState<{ [id: string]: boolean }>({});
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // Đồng hồ chạy trong lúc stream; dừng lại khi nhận được số liệu cuối từ server.
+  const [liveElapsedMs, setLiveElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (!isStreaming || !streamStartedAt) {
+      return;
+    }
+    setLiveElapsedMs(Date.now() - streamStartedAt);
+    const timer = window.setInterval(() => {
+      setLiveElapsedMs(Date.now() - streamStartedAt);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [isStreaming, streamStartedAt]);
+
+  // Ước lượng token khi provider không trả usage. Tiếng Việt tốn token hơn
+  // tiếng Anh, nhưng 4 ký tự/token vẫn là mức xấp xỉ chấp nhận được để hiển thị.
+  const displayTokens = streamMetrics
+    ? streamMetrics.completionTokens
+    : Math.ceil(streamingMessage.length / 4);
+  const displayElapsedMs = streamMetrics ? streamMetrics.elapsedMs : liveElapsedMs;
+  const tokensPerSecond =
+    displayElapsedMs > 0 ? displayTokens / (displayElapsedMs / 1000) : 0;
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -140,7 +183,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onClick={() => setPreviewImage(src)}
         >
           <img src={src} alt={att.name} className="w-28 h-28 object-cover transition-transform group-hover:scale-105" />
-          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-medium p-1 text-center truncate">
+          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[13px] font-medium p-1 text-center truncate">
             {att.name}
           </div>
         </div>
@@ -185,7 +228,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
         <div className="overflow-hidden text-left flex-1">
           <div className="text-xs font-semibold truncate leading-tight">{att.name}</div>
-          <div className="text-[10px] opacity-80 mt-0.5 flex items-center gap-1.5">
+          <div className="text-[13px] opacity-80 mt-0.5 flex items-center gap-1.5">
             <span className="uppercase font-mono">{att.type}</span>
             <span>•</span>
             <span>{formatFileSize(att.size)}</span>
@@ -283,7 +326,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <div className={`flex flex-col max-w-[88%] sm:max-w-[80%] ${isUser ? 'items-end' : 'items-start'}`}>
                     {/* User Message Bubble */}
                     {isUser ? (
-                      <div className="px-4 py-3 rounded-2xl rounded-tr-xs bg-amber-500 text-white text-[15px] leading-relaxed shadow-xs selection:bg-amber-600 selection:text-white space-y-2">
+                      <div className="px-4 py-3 rounded-2xl rounded-tr-xs bg-amber-500 text-white text-[18px] leading-relaxed shadow-xs selection:bg-amber-600 selection:text-white space-y-2">
                         {/* Attached files preview */}
                         {msg.attachments && msg.attachments.length > 0 && (
                           <div className="flex flex-wrap gap-2 pb-1">
@@ -311,17 +354,45 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                             </button>
                             {isExpanded && (
-                              <div className="px-3.5 py-2.5 border-t border-stone-200/60 dark:border-stone-800/60 text-stone-600 dark:text-stone-300 font-mono text-[12px] whitespace-pre-wrap leading-relaxed bg-white/40 dark:bg-stone-900/40">
+                              <div className="px-3.5 py-2.5 border-t border-stone-200/60 dark:border-stone-800/60 text-stone-600 dark:text-stone-300 font-mono text-[15px] whitespace-pre-wrap leading-relaxed bg-white/40 dark:bg-stone-900/40">
                                 {msg.thinkingContent}
                               </div>
                             )}
                           </div>
                         )}
 
-                        {/* Content text */}
+                        {/* Nội dung trả lời */}
                         <div className="px-1 text-stone-900 dark:text-stone-100">
                           <MarkdownRenderer content={msg.content} />
                         </div>
+
+                        {/* Số liệu token / tốc độ / thời gian của lượt trả lời đã xong */}
+                        {msg.metrics && (
+                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1 text-[11px] font-mono text-stone-400 dark:text-stone-500">
+                            <span
+                              title={
+                                msg.metrics.promptTokens
+                                  ? `${msg.metrics.promptTokens} token đầu vào · ${msg.metrics.completionTokens} token sinh ra`
+                                  : `${msg.metrics.completionTokens} token sinh ra`
+                              }
+                            >
+                              <span className="text-amber-600 dark:text-amber-500 font-semibold">
+                                {msg.metrics.completionTokens}
+                              </span>{' '}
+                              token
+                              {msg.metrics.source === 'estimate' && <span className="ml-1 opacity-60">(ước tính)</span>}
+                            </span>
+                            <span className="opacity-40">·</span>
+                            <span>
+                              {msg.metrics.elapsedMs > 0
+                                ? (msg.metrics.completionTokens / (msg.metrics.elapsedMs / 1000)).toFixed(1)
+                                : '0.0'}{' '}
+                              tok/s
+                            </span>
+                            <span className="opacity-40">·</span>
+                            <span>{formatDuration(msg.metrics.elapsedMs)}</span>
+                          </div>
+                        )}
 
                         {/* Action buttons */}
                         <div className="flex items-center gap-1.5 pt-1 text-stone-400">
@@ -387,6 +458,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Số liệu token / tốc độ / thời gian */}
+                  {(streamingMessage || streamMetrics) && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-1 text-[11px] font-mono text-stone-400 dark:text-stone-500">
+                      <span title={`${displayTokens} token sinh ra${streamMetrics?.promptTokens ? ` · ${streamMetrics.promptTokens} token đầu vào` : ''}`}>
+                        <span className="text-amber-600 dark:text-amber-500 font-semibold">
+                          {displayTokens}
+                        </span>{' '}
+                        token
+                        {streamMetrics?.source === 'estimate' && (
+                          <span className="ml-1 opacity-60">(ước tính)</span>
+                        )}
+                      </span>
+                      <span className="opacity-40">·</span>
+                      <span title="Tốc độ sinh token trung bình">
+                        {tokensPerSecond.toFixed(1)} tok/s
+                      </span>
+                      <span className="opacity-40">·</span>
+                      <span title="Thời gian từ lúc gửi đến khi nhận xong">
+                        {formatDuration(displayElapsedMs)}
+                      </span>
+                      {!streamMetrics && (
+                        <span className="opacity-40">·</span>
+                      )}
+                      {!streamMetrics && (
+                        <span className="animate-pulse">đang nhận...</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

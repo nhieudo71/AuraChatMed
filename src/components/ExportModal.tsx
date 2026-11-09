@@ -158,7 +158,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <div className="text-xs font-semibold text-stone-900 dark:text-stone-100">
                     {fmt.name}
                   </div>
-                  <div className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+                  <div className="text-[14px] text-stone-500 dark:text-stone-400 mt-0.5">
                     {fmt.desc}
                   </div>
                 </div>

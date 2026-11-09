@@ -25,7 +25,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
     });
   };
 
-  return <div className="space-y-3 leading-relaxed text-[15px]">{renderFormattedText(content)}</div>;
+  return <div className="space-y-3 leading-relaxed text-[18px]">{renderFormattedText(content)}</div>;
 };
 
 const CodeBlock: React.FC<{ code: string; language?: string }> = ({ code, language }) => {
@@ -50,7 +50,7 @@ const CodeBlock: React.FC<{ code: string; language?: string }> = ({ code, langua
           <span>{copied ? 'Đã sao chép' : 'Sao chép'}</span>
         </button>
       </div>
-      <pre className="p-4 overflow-x-auto text-[13px] leading-relaxed">
+      <pre className="p-4 overflow-x-auto text-[16px] leading-relaxed">
         <code>{code}</code>
       </pre>
     </div>
@@ -132,7 +132,7 @@ function renderInline(text: string): React.ReactNode {
     }
     if (part.startsWith('`') && part.endsWith('`')) {
       return (
-        <code key={i} className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-amber-600 dark:text-amber-400 font-mono text-[13px] border border-stone-200 dark:border-stone-700">
+        <code key={i} className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-amber-600 dark:text-amber-400 font-mono text-[16px] border border-stone-200 dark:border-stone-700">
           {part.slice(1, -1)}
         </code>
       );

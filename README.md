@@ -117,6 +117,8 @@
 │   ├── main.tsx                # Điểm khởi động ứng dụng React
 │   ├── App.tsx                 # Điều phối state chính, luồng chat, SSE & Modals
 │   ├── index.css               # Định nghĩa theme toàn cục & Tailwind CSS v4
+│   ├── config/
+│   │   └── appConfig.ts        # Cấu hình trung tâm đọc từ biến môi trường
 │   ├── types/
 │   │   └── index.ts            # Định nghĩa toàn bộ TypeScript Interfaces & Types
 │   ├── lib/
@@ -182,6 +184,11 @@ GEMINI_API_KEY="AIzaSy..."
 # Đường dẫn URL của ứng dụng
 APP_URL="http://localhost:3000"
 ```
+
+> 💡 **Không còn giá trị nào bị gắn cứng vào mã nguồn.** Tên mô hình AI, cổng máy chủ,
+> HMR và cấu hình Firebase đều đọc từ `.env` thông qua [src/config/appConfig.ts](src/config/appConfig.ts).
+> Xem đầy đủ danh sách biến trong `.env.example`. Nếu bỏ trống, ứng dụng dùng giá trị mặc định
+> như cũ nên vẫn chạy được ngay.
 
 ### 4. Chạy Ứng Dụng Ở Chế Độ Phát Triển (Development)
 ```bash

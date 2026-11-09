@@ -36,7 +36,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <div className="p-1 rounded-xl bg-amber-500/10 text-amber-500">
           <MessageSquarePlus size={18} />
         </div>
-        <span className="text-[10px] font-medium mt-0.5">Chat mới</span>
+        <span className="text-[13px] font-medium mt-0.5">Chat mới</span>
       </button>
 
       <button
@@ -47,7 +47,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <div className="p-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
           <Stethoscope size={18} />
         </div>
-        <span className="text-[10px] font-bold mt-0.5">Y Khoa</span>
+        <span className="text-[13px] font-bold mt-0.5">Y Khoa</span>
       </button>
 
       <button
@@ -58,7 +58,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <div className="p-1 rounded-xl text-stone-600 dark:text-stone-300">
           <Key size={18} />
         </div>
-        <span className="text-[10px] font-medium mt-0.5">Khóa API</span>
+        <span className="text-[13px] font-medium mt-0.5">Khóa API</span>
       </button>
 
       <button
@@ -69,7 +69,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <div className="p-1 rounded-xl text-blue-500">
           <FolderSync size={18} />
         </div>
-        <span className="text-[10px] font-medium mt-0.5">Workspace</span>
+        <span className="text-[13px] font-medium mt-0.5">Workspace</span>
       </button>
 
       <button
@@ -80,7 +80,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <div className="p-1 rounded-xl text-stone-600 dark:text-stone-300">
           <Download size={18} />
         </div>
-        <span className="text-[10px] font-medium mt-0.5">Xuất file</span>
+        <span className="text-[13px] font-medium mt-0.5">Xuất file</span>
       </button>
 
       <button
@@ -91,7 +91,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <div className="p-1 rounded-xl text-stone-600 dark:text-stone-300">
           <Settings size={18} />
         </div>
-        <span className="text-[10px] font-medium mt-0.5">Cài đặt</span>
+        <span className="text-[13px] font-medium mt-0.5">Cài đặt</span>
       </button>
     </nav>
   );

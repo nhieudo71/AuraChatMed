@@ -10,6 +10,7 @@ import {
   signInWithGoogle,
   signOutUser,
   subscribeAuth,
+  completeRedirectSignIn,
   subscribeUserSessions,
   subscribeSessionMessages,
   saveSession,
@@ -32,6 +33,7 @@ import { VoiceModal } from './components/VoiceModal';
 import { APIKeyManagerModal } from './components/APIKeyManagerModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MedicalExamModal } from './components/medical/MedicalExamModal';
+import { FAST_MODEL, THINKING_MODEL, DEFAULT_CUSTOM_LLM_MODEL } from './config/appConfig';
 
 const LOCAL_STORAGE_SESSIONS = 'aurachat_sessions_v1';
 const LOCAL_STORAGE_MESSAGES = 'aurachat_messages_v1';
@@ -59,6 +61,15 @@ export default function App() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
+  // Số liệu đo được trong lúc stream: token nhận về, tốc độ, thời gian.
+  const [streamMetrics, setStreamMetrics] = useState<{
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    source: 'provider' | 'estimate';
+    elapsedMs: number;
+  } | null>(null);
+  const [streamStartedAt, setStreamStartedAt] = useState<number | null>(null);
   const [thinkingMode, setThinkingMode] = useState(false);
 
   // Modals
@@ -121,10 +132,16 @@ export default function App() {
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Bản sao số liệu mới nhất; state có thể chưa kịp cập nhật trong closure của stream.
+  const streamMetricsRef = useRef<typeof streamMetrics>(null);
 
   // 1. Initial boot: Test Firebase connection and subscribe to auth
   useEffect(() => {
     testConnection();
+
+    // Hoàn tất đăng nhập nếu người dùng vừa quay về từ redirect (di động /
+    // trình duyệt chặn popup). Không chặn luồng khởi động nếu thất bại.
+    completeRedirectSignIn();
 
     const unsubscribe = subscribeAuth((currentUser, token) => {
       setUser(currentUser);
@@ -179,7 +196,7 @@ export default function App() {
           id: 'session_' + Date.now(),
           userId: 'local_user',
           title: 'Cuộc trò chuyện mới',
-          model: 'gemini-3.8-flash',
+          model: FAST_MODEL,
           thinkingLevel: 'MEDIUM',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -227,7 +244,7 @@ export default function App() {
   // Update session thinking mode when active session changes
   useEffect(() => {
     if (activeSession) {
-      setThinkingMode(activeSession.model === 'gemini-4-argon');
+      setThinkingMode(activeSession.model === THINKING_MODEL);
     }
   }, [activeSessionId]);
 
@@ -237,7 +254,7 @@ export default function App() {
       id: 'session_' + Date.now(),
       userId: user ? user.uid : 'local_user',
       title: 'Cuộc trò chuyện mới',
-      model: thinkingMode ? 'gemini-4-argon' : 'gemini-3.8-flash',
+      model: thinkingMode ? THINKING_MODEL : FAST_MODEL,
       thinkingLevel: thinkingMode ? 'HIGH' : 'MEDIUM',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -252,12 +269,40 @@ export default function App() {
     }
   };
 
+  /**
+   * Cung cấp thông tin xác thực cho các tính năng gọi AI trực tiếp (ví dụ sinh
+   * câu hỏi trắc nghiệm từ tài liệu). Ưu tiên provider LLM người dùng đã cấu
+   * hình, sau đó mới tới khóa trong vault.
+   */
+  const handleResolveApiCredentials = async (): Promise<{
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+  }> => {
+    if (activeCustomProvider && activeCustomProvider.category === 'llm') {
+      const key = activeCustomProvider.apiKey
+        ? await decryptApiKey(activeCustomProvider.apiKey)
+        : undefined;
+      return {
+        apiKey: key,
+        baseUrl: activeCustomProvider.baseUrl,
+        model: activeCustomProvider.selectedModel || DEFAULT_CUSTOM_LLM_MODEL,
+      };
+    }
+
+    if (encryptedApiKey) {
+      return { apiKey: await decryptApiKey(encryptedApiKey) };
+    }
+
+    return {};
+  };
+
   const handleStartMedicalChat = (systemPrompt: string, starterMessage?: string) => {
     const newSession: ChatSession = {
       id: 'session_' + Date.now(),
       userId: user ? user.uid : 'local_user',
       title: 'Hội chẩn Y Khoa & Ôn thi',
-      model: 'gemini-4-argon', // High thinking model for medical Socratic reasoning
+      model: THINKING_MODEL, // Mô hình suy luận sâu cho hội chẩn Socratic
       thinkingLevel: 'HIGH',
       systemPrompt,
       createdAt: new Date().toISOString(),
@@ -336,7 +381,7 @@ export default function App() {
     setThinkingMode(nextVal);
 
     if (activeSessionId) {
-      const targetModel = nextVal ? 'gemini-4-argon' : 'gemini-3.8-flash';
+      const targetModel = nextVal ? THINKING_MODEL : FAST_MODEL;
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
@@ -396,7 +441,7 @@ export default function App() {
         id: 'session_' + Date.now(),
         userId: user ? user.uid : 'local_user',
         title: generateChatTitle(effectiveText),
-        model: thinkingMode ? 'gemini-4-argon' : 'gemini-3.8-flash',
+        model: thinkingMode ? THINKING_MODEL : FAST_MODEL,
         thinkingLevel: thinkingMode ? 'HIGH' : 'MEDIUM',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -441,6 +486,11 @@ export default function App() {
     setIsStreaming(true);
     setStreamingMessage('');
     setStreamingThinking('');
+    setStreamMetrics(null);
+
+    const startedAt = Date.now();
+    setStreamStartedAt(startedAt);
+    let firstTokenAt: number | null = null;
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -449,14 +499,14 @@ export default function App() {
       // Decrypt custom API key if configured (either custom provider or vault key)
       let decryptedKey = '';
       let targetBaseUrl = '';
-      let targetModel = thinkingMode ? 'gemini-4-argon' : 'gemini-3.8-flash';
+      let targetModel = thinkingMode ? THINKING_MODEL : FAST_MODEL;
 
       if (activeCustomProvider && activeCustomProvider.category === 'llm') {
         if (activeCustomProvider.apiKey) {
           decryptedKey = await decryptApiKey(activeCustomProvider.apiKey);
         }
         targetBaseUrl = activeCustomProvider.baseUrl;
-        targetModel = activeCustomProvider.selectedModel || 'gpt-4o';
+        targetModel = activeCustomProvider.selectedModel || DEFAULT_CUSTOM_LLM_MODEL;
       } else if (encryptedApiKey) {
         decryptedKey = await decryptApiKey(encryptedApiKey);
       }
@@ -511,7 +561,20 @@ export default function App() {
               if (data.error) {
                 accumulatedText += `\n[Lỗi: ${data.error}]`;
                 setStreamingMessage(accumulatedText);
+              } else if (data.usage) {
+                const nextMetrics = {
+                  promptTokens: data.usage.promptTokens ?? 0,
+                  completionTokens: data.usage.completionTokens ?? 0,
+                  totalTokens: data.usage.totalTokens ?? 0,
+                  source: (data.usage.source === 'provider' ? 'provider' : 'estimate') as
+                    | 'provider'
+                    | 'estimate',
+                  elapsedMs: data.usage.elapsedMs ?? Date.now() - startedAt,
+                };
+                streamMetricsRef.current = nextMetrics;
+                setStreamMetrics(nextMetrics);
               } else if (data.text) {
+                if (firstTokenAt === null) firstTokenAt = Date.now();
                 accumulatedText += data.text;
                 setStreamingMessage(accumulatedText);
               } else if (data.thinking) {
@@ -524,6 +587,14 @@ export default function App() {
       }
 
       // Finish streaming and persist model response
+      const finalMetrics = streamMetricsRef.current ?? {
+        promptTokens: 0,
+        completionTokens: Math.ceil(accumulatedText.length / 4),
+        totalTokens: Math.ceil(accumulatedText.length / 4),
+        source: 'estimate' as const,
+        elapsedMs: Date.now() - startedAt,
+      };
+
       const modelMessage: ChatMessage = {
         id: 'msg_' + Date.now() + '_model',
         sessionId: currentSessionId,
@@ -532,6 +603,7 @@ export default function App() {
         content: accumulatedText || 'Xin lỗi, không nhận được phản hồi từ mô hình.',
         thinkingContent: accumulatedThinking || undefined,
         createdAt: new Date().toISOString(),
+        metrics: finalMetrics,
       };
 
       const finalMessages = [...updatedMessages, modelMessage];
@@ -644,6 +716,8 @@ export default function App() {
           isStreaming={isStreaming}
           streamingMessage={streamingMessage}
           streamingThinking={streamingThinking}
+          streamStartedAt={streamStartedAt}
+          streamMetrics={streamMetrics}
           onSelectStarterPrompt={(prompt) => handleSendMessage(prompt)}
           systemPrompt={activeSession?.systemPrompt}
           ttsVoice={preferences.ttsVoice}
@@ -651,8 +725,8 @@ export default function App() {
             activeCustomProvider
               ? `${activeCustomProvider.name} (${activeCustomProvider.selectedModel})`
               : thinkingMode
-              ? 'gemini-4-argon'
-              : 'gemini-3.8-flash'
+              ? THINKING_MODEL
+              : FAST_MODEL
           }
         />
 
@@ -747,6 +821,7 @@ export default function App() {
         isOpen={isMedicalModalOpen}
         onClose={() => setIsMedicalModalOpen(false)}
         onStartMedicalChat={handleStartMedicalChat}
+        onResolveApiCredentials={handleResolveApiCredentials}
       />
     </div>
   );

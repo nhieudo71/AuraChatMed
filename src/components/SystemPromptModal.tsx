@@ -145,7 +145,7 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
             <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100 flex items-center gap-2">
               <span>Bộ nhớ System Prompt</span>
               {isMedicalActive && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20 flex items-center gap-1">
+                <span className="text-[13px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20 flex items-center gap-1">
                   <Stethoscope size={10} />
                   <span>Đang dùng mẫu Y Khoa Toàn Diện</span>
                 </span>
@@ -170,11 +170,11 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
                   <span className="text-xs font-bold text-stone-900 dark:text-stone-100">
                     Mẫu Chuẩn Y Khoa Toàn Diện
                   </span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500 text-white font-semibold">
+                  <span className="text-[13px] px-1.5 py-0.2 rounded-full bg-emerald-500 text-white font-semibold">
                     Tất cả trong 1
                   </span>
                 </div>
-                <p className="text-[11px] text-stone-600 dark:text-stone-300 mt-0.5 leading-relaxed">
+                <p className="text-[14px] text-stone-600 dark:text-stone-300 mt-0.5 leading-relaxed">
                   Tích hợp đồng thời: Học tập lâm sàng & cơ sở, Phương pháp nghiên cứu EBM, Tạo trắc nghiệm ca bệnh thực tế (MCQs) và Ôn thi học kỳ / cuối kỳ.
                 </p>
               </div>
@@ -199,7 +199,7 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
                 <button
                   onClick={handleCopyPrompt}
                   disabled={!promptText}
-                  className="flex items-center gap-1 text-[11px] text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 transition-colors disabled:opacity-40"
+                  className="flex items-center gap-1 text-[14px] text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 transition-colors disabled:opacity-40"
                   title="Sao chép toàn bộ chỉ dẫn"
                 >
                   <Copy size={11} />
@@ -216,7 +216,7 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
               placeholder="Nhập hoặc chọn mẫu chỉ dẫn hệ thống bên dưới..."
               className="w-full p-3.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/60 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 text-xs sm:text-sm font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all resize-y"
             />
-            <div className="flex justify-between items-center mt-1 text-[11px] text-stone-400">
+            <div className="flex justify-between items-center mt-1 text-[14px] text-stone-400">
               <span>Tự động đưa vào cấu hình systemInstruction khi AI suy luận.</span>
               <span>{promptText.length} / 15,000 ký tự</span>
             </div>
@@ -255,17 +255,17 @@ export const SystemPromptModal: React.FC<SystemPromptModalProps> = ({
                           <span>{preset.title}</span>
                         </span>
                         {preset.isMedical && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500 text-white font-semibold shrink-0">
+                          <span className="text-[13px] px-2 py-0.5 rounded-full bg-emerald-500 text-white font-semibold shrink-0">
                             Khuyên dùng cho SV Y
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-stone-500 dark:text-stone-400 line-clamp-2 mt-1 leading-relaxed">
+                      <p className="text-[14px] text-stone-500 dark:text-stone-400 line-clamp-2 mt-1 leading-relaxed">
                         {preset.desc}
                       </p>
                     </div>
 
-                    <div className="mt-2 text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <div className="mt-2 text-[13px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
                       <span>Nhấp để tải mẫu</span>
                     </div>
                   </button>

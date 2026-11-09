@@ -244,7 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Stethoscope size={14} className="text-emerald-500" />
               <span>Góc Ôn Thi Y Khoa</span>
             </div>
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">
+            <span className="text-[13px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">
               MedEd
             </span>
           </button>
@@ -260,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Key size={14} className="text-amber-500" />
               <span>Quản lý Khóa API</span>
             </div>
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold">
+            <span className="text-[13px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold">
               100+ dịch vụ
             </span>
           </button>
@@ -273,7 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Sparkles size={14} className="text-amber-500" />
               <span>Chỉ dẫn hệ thống</span>
             </div>
-            <span className="text-[10px] text-stone-400">Tùy biến</span>
+            <span className="text-[13px] text-stone-400">Tùy biến</span>
           </button>
 
           {/* User Profile / Google Sign-in */}
@@ -295,7 +295,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="text-xs font-semibold text-stone-900 dark:text-stone-100 truncate">
                     {user.displayName || user.email?.split('@')[0]}
                   </div>
-                  <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                  <div className="flex items-center gap-1 text-[13px] text-emerald-600 dark:text-emerald-400">
                     <Cloud size={10} />
                     <span>Firebase Sync</span>
                   </div>
@@ -335,10 +335,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>Đăng nhập đồng bộ</span>
               </button>
               <div className="flex justify-between items-center px-1">
-                <span className="text-[10px] text-stone-400">Lưu dữ liệu thiết bị</span>
+                <span className="text-[13px] text-stone-400">Lưu dữ liệu thiết bị</span>
                 <button
                   onClick={onOpenSettings}
-                  className="text-[11px] text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 flex items-center gap-1"
+                  className="text-[14px] text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 flex items-center gap-1"
                 >
                   <Settings size={12} />
                   <span>Cài đặt</span>

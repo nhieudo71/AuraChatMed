@@ -13,6 +13,11 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+  // Phải khai báo cùng các hook khác ở đầu component. Trước đây hook này nằm
+  // sau các lệnh `return` sớm nên khi `isInstallable`/`isIOS` đổi giá trị,
+  // số hook giữa các lần render khác nhau và React sập cả cây
+  // ("Rendered fewer hooks than expected") — biểu hiện là màn hình trắng.
+  const [showHelpGuide, setShowHelpGuide] = useState(false);
 
   // If already installed as PWA standalone, suppress
   if (isInstalled) {
@@ -102,8 +107,6 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       </>
     );
   }
-
-  const [showHelpGuide, setShowHelpGuide] = useState(false);
 
   // Fallback for desktop/browsers where prompt is not yet triggered: show friendly custom in-app guide modal
   return (

@@ -18,6 +18,14 @@ export interface ChatMessage {
   thinkingContent?: string;
   attachments?: ChatAttachment[];
   createdAt: string;
+  /** Số liệu đo lường của lượt trả lời, lưu lại để xem sau khi stream kết thúc. */
+  metrics?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    source: 'provider' | 'estimate';
+    elapsedMs: number;
+  };
 }
 
 export interface ChatSession {

@@ -2,12 +2,13 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { handleChatStream, handleTranscribeAudio, handleFetchModels, handleTestModel } from './src/services/geminiServer';
+import { SERVER_PORT } from './src/config/serverConfig';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = SERVER_PORT;
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));

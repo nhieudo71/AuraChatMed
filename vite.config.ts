@@ -8,6 +8,7 @@ import { defineConfig, Plugin } from 'vite';
 dotenv.config();
 import { VitePWA } from 'vite-plugin-pwa';
 import { handleChatStream, handleTranscribeAudio, handleFetchModels, handleTestModel } from './src/services/geminiServer.ts';
+import { SERVER_PORT, SERVER_HOST, HMR_ENABLED } from './src/config/serverConfig.ts';
 
 function apiServerPlugin(): Plugin {
   return {
@@ -114,11 +115,11 @@ export default defineConfig(() => {
       },
     },
     server: {
-      port: 3000,
-      host: '0.0.0.0',
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      port: SERVER_PORT,
+      host: SERVER_HOST,
+      // Có thể tắt HMR bằng biến môi trường VITE_HMR=false hoặc DISABLE_HMR=true.
+      hmr: HMR_ENABLED,
+      watch: HMR_ENABLED ? {} : null,
     },
   };
 });

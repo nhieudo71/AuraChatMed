@@ -30,7 +30,7 @@ import {
   ClinicalCase,
   MedicalFlashcard,
 } from '../../types/medical';
-import { MEDICAL_QUESTIONS } from '../../data/medicalQuestionBank';
+import { QuestionBankTab } from './QuestionBankTab';
 import { CLINICAL_CASES } from '../../data/clinicalCasesData';
 import { MEDICAL_FLASHCARDS } from '../../data/medicalFlashcardsData';
 import {
@@ -46,47 +46,18 @@ interface MedicalExamModalProps {
   isOpen: boolean;
   onClose: () => void;
   onStartMedicalChat: (systemPrompt: string, starterMessage?: string) => void;
+  /** Lay khoa API da giai ma de dung cho tinh nang sinh cau hoi. */
+  onResolveApiCredentials?: () => Promise<{ apiKey?: string; baseUrl?: string; model?: string }>;
 }
 
 export const MedicalExamModal: React.FC<MedicalExamModalProps> = ({
   isOpen,
   onClose,
   onStartMedicalChat,
+  onResolveApiCredentials,
 }) => {
   const [activeTab, setActiveTab] = useState<'mcq' | 'cases' | 'calculators' | 'flashcards' | 'ai_assistant'>('mcq');
 
-  // MCQ State
-  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('all');
-  const [selectedExamCategory, setSelectedExamCategory] = useState<string>('all');
-  const [examMode, setExamMode] = useState<'study' | 'timed'>('study');
-  const [userAnswers, setUserAnswers] = useState<Record<number, number>>({});
-  const [isExamSubmitted, setIsExamSubmitted] = useState(false);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [showExplanation, setShowExplanation] = useState<Record<number, boolean>>({});
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-
-  // Filtered Questions
-  const filteredQuestions = MEDICAL_QUESTIONS.filter((q) => {
-    const matchSpecialty = selectedSpecialty === 'all' || q.specialty === selectedSpecialty;
-    const matchCategory = selectedExamCategory === 'all' || q.examCategory === selectedExamCategory;
-    return matchSpecialty && matchCategory;
-  });
-
-  const activeQuestions = filteredQuestions.length > 0 ? filteredQuestions : MEDICAL_QUESTIONS;
-
-  // Timer effect for timed mode
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (examMode === 'timed' && isTimerRunning && !isExamSubmitted) {
-      interval = setInterval(() => {
-        setTimerSeconds((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [examMode, isTimerRunning, isExamSubmitted]);
 
   // Clinical Cases State
   const [activeCaseIndex, setActiveCaseIndex] = useState(0);
@@ -146,51 +117,6 @@ export const MedicalExamModal: React.FC<MedicalExamModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Handlers for MCQ
-  const handleSelectAnswer = (qIndex: number, optIndex: number) => {
-    if (isExamSubmitted && examMode === 'timed') return;
-    setUserAnswers((prev) => ({ ...prev, [qIndex]: optIndex }));
-    if (examMode === 'study') {
-      setShowExplanation((prev) => ({ ...prev, [qIndex]: true }));
-    }
-  };
-
-  const handleSubmitExam = () => {
-    setIsExamSubmitted(true);
-    setIsTimerRunning(false);
-  };
-
-  const handleResetExam = () => {
-    setUserAnswers({});
-    setIsExamSubmitted(false);
-    setCurrentQuestionIndex(0);
-    setShowExplanation({});
-    setTimerSeconds(0);
-    setIsTimerRunning(examMode === 'timed');
-  };
-
-  const calculateScore = () => {
-    let correctCount = 0;
-    activeQuestions.forEach((q, idx) => {
-      if (userAnswers[idx] === q.correctIndex) {
-        correctCount += 1;
-      }
-    });
-    return {
-      score: correctCount,
-      total: activeQuestions.length,
-      percentage: Math.round((correctCount / activeQuestions.length) * 100),
-    };
-  };
-
-  const scoreResult = calculateScore();
-
-  // Format time
-  const formatTimer = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
 
   // Launch Medical AI Session
   const handleLaunchMedicalChat = (mode: 'consultant' | 'case' | 'custom', customText?: string) => {
@@ -213,7 +139,6 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
     onClose();
   };
 
-  const currentQ = activeQuestions[currentQuestionIndex] || activeQuestions[0];
   const activeCase = CLINICAL_CASES[activeCaseIndex] || CLINICAL_CASES[0];
   const activeCard = MEDICAL_FLASHCARDS[flashcardIndex] || MEDICAL_FLASHCARDS[0];
 
@@ -231,7 +156,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                 <h2 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100">
                   AuraMed - Không Gian Y Khoa Chuyên Sâu
                 </h2>
-                <span className="hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                <span className="hidden sm:inline-block text-[13px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
                   Dành cho Sinh Viên Y Dược
                 </span>
               </div>
@@ -261,7 +186,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
             }`}
           >
             <BookOpen size={15} />
-            <span>Luyện Thi Trắc Nghiệm ({MEDICAL_QUESTIONS.length})</span>
+            <span>Ngân Hàng Câu Hỏi</span>
           </button>
 
           <button
@@ -315,251 +240,9 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-          {/* TAB 1: MCQ EXAMS */}
+          {/* TAB 1: NGAN HANG CAU HOI (sinh tu tai lieu + thu vien) */}
           {activeTab === 'mcq' && (
-            <div className="space-y-4">
-              {/* Filter & Controls bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 rounded-2xl bg-stone-50 dark:bg-stone-850 border border-stone-200/80 dark:border-stone-800 text-xs">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-stone-500">Chuyên khoa:</span>
-                  <select
-                    value={selectedSpecialty}
-                    onChange={(e) => {
-                      setSelectedSpecialty(e.target.value);
-                      handleResetExam();
-                    }}
-                    className="bg-white dark:bg-stone-800 px-2.5 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 text-xs text-stone-800 dark:text-stone-200 focus:outline-none"
-                  >
-                    <option value="all">Tất cả chuyên khoa</option>
-                    <option value="internal">Nội khoa (Tim mạch, Hô hấp, Tiêu hóa)</option>
-                    <option value="surgery">Ngoại khoa</option>
-                    <option value="pediatrics">Nhi khoa</option>
-                    <option value="obgyn">Sản - Phụ khoa</option>
-                    <option value="emergency">Cấp cứu - Hồi sức tích cực</option>
-                    <option value="pharmacology">Dược lý học</option>
-                    <option value="physiology">Sinh lý học & Thăng bằng toan kiềm</option>
-                    <option value="anatomy">Giải phẫu học</option>
-                    <option value="pathology">Giải phẫu bệnh & Miễn dịch</option>
-                  </select>
-
-                  <span className="font-semibold text-stone-500 ml-2">Mục tiêu:</span>
-                  <select
-                    value={selectedExamCategory}
-                    onChange={(e) => {
-                      setSelectedExamCategory(e.target.value);
-                      handleResetExam();
-                    }}
-                    className="bg-white dark:bg-stone-800 px-2.5 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 text-xs text-stone-800 dark:text-stone-200 focus:outline-none"
-                  >
-                    <option value="all">Tất cả kỳ thi</option>
-                    <option value="semester">Thi Học Kỳ</option>
-                    <option value="final">Thi Cuối Kỳ / Tốt Nghiệp</option>
-                    <option value="competency">Đánh Giá Năng Lực (Licensing)</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center rounded-xl bg-stone-200 dark:bg-stone-700 p-0.5">
-                    <button
-                      onClick={() => {
-                        setExamMode('study');
-                        setIsTimerRunning(false);
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                        examMode === 'study' ? 'bg-white dark:bg-stone-800 text-emerald-600 shadow-xs' : 'text-stone-500'
-                      }`}
-                    >
-                      Học tập (Biện luận)
-                    </button>
-                    <button
-                      onClick={() => {
-                        setExamMode('timed');
-                        setIsTimerRunning(true);
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                        examMode === 'timed' ? 'bg-white dark:bg-stone-800 text-emerald-600 shadow-xs' : 'text-stone-500'
-                      }`}
-                    >
-                      Thi thử bấm giờ
-                    </button>
-                  </div>
-
-                  {examMode === 'timed' && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-xs font-bold border border-amber-500/20">
-                      <Timer size={13} />
-                      <span>{formatTimer(timerSeconds)}</span>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={handleResetExam}
-                    className="p-1.5 rounded-xl text-stone-500 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-stone-750 transition-colors"
-                    title="Làm lại đề thi"
-                  >
-                    <RotateCcw size={14} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress and Question Counter */}
-              <div className="flex items-center justify-between text-xs text-stone-500">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-stone-900 dark:text-stone-100">
-                    Câu {currentQuestionIndex + 1} / {activeQuestions.length}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 capitalize text-[11px]">
-                    {currentQ.specialty}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
-                    {currentQ.examCategory === 'competency' ? 'Đánh Giá Năng Lực' : currentQ.examCategory === 'final' ? 'Thi Cuối Kỳ' : 'Thi Học Kỳ'}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1 overflow-x-auto max-w-[50%]">
-                  {activeQuestions.map((_, idx) => {
-                    const answered = userAnswers[idx] !== undefined;
-                    const isCurrent = idx === currentQuestionIndex;
-                    const isCorrect = isExamSubmitted && userAnswers[idx] === activeQuestions[idx].correctIndex;
-                    const isWrong = isExamSubmitted && answered && !isCorrect;
-
-                    let bg = 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400';
-                    if (isExamSubmitted) {
-                      bg = isCorrect
-                        ? 'bg-emerald-500 text-white'
-                        : isWrong
-                        ? 'bg-rose-500 text-white'
-                        : 'bg-stone-200 dark:bg-stone-800 text-stone-400';
-                    } else if (answered) {
-                      bg = 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold';
-                    }
-                    if (isCurrent) {
-                      bg += ' ring-2 ring-emerald-500';
-                    }
-
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => setCurrentQuestionIndex(idx)}
-                        className={`w-6 h-6 rounded-lg text-[10px] font-bold flex items-center justify-center shrink-0 transition-all ${bg}`}
-                      >
-                        {idx + 1}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Question Card */}
-              <div className="p-5 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-sm space-y-4">
-                {/* Clinical Vignette if present */}
-                {currentQ.vignette && (
-                  <div className="p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/60 text-xs text-stone-800 dark:text-stone-200 leading-relaxed">
-                    <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300 mb-1">
-                      <FileText size={14} />
-                      <span>Tình huống ca bệnh lâm sàng:</span>
-                    </div>
-                    <p>{currentQ.vignette}</p>
-                  </div>
-                )}
-
-                {/* Question Prompt */}
-                <h3 className="text-sm font-semibold text-stone-900 dark:text-stone-100 leading-snug">
-                  {currentQ.question}
-                </h3>
-
-                {/* Options List */}
-                <div className="space-y-2">
-                  {currentQ.options.map((option, optIdx) => {
-                    const isSelected = userAnswers[currentQuestionIndex] === optIdx;
-                    const isCorrect = optIdx === currentQ.correctIndex;
-                    const showResult = (examMode === 'study' && userAnswers[currentQuestionIndex] !== undefined) || isExamSubmitted;
-
-                    let btnClass = 'border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-850 text-stone-800 dark:text-stone-200';
-                    if (isSelected && !showResult) {
-                      btnClass = 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 font-medium';
-                    } else if (showResult) {
-                      if (isCorrect) {
-                        btnClass = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-medium';
-                      } else if (isSelected && !isCorrect) {
-                        btnClass = 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 font-medium';
-                      }
-                    }
-
-                    return (
-                      <button
-                        key={optIdx}
-                        onClick={() => handleSelectAnswer(currentQuestionIndex, optIdx)}
-                        className={`w-full text-left p-3.5 rounded-xl border text-xs flex items-start gap-3 transition-all ${btnClass}`}
-                      >
-                        <span className="w-5 h-5 rounded-full border border-current flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
-                          {String.fromCharCode(65 + optIdx)}
-                        </span>
-                        <span className="flex-1 leading-relaxed">{option}</span>
-                        {showResult && isCorrect && <CheckCircle2 size={16} className="text-emerald-500 shrink-0 mt-0.5" />}
-                        {showResult && isSelected && !isCorrect && <XCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Detailed Explanation / Reasoning */}
-                {((examMode === 'study' && userAnswers[currentQuestionIndex] !== undefined) || isExamSubmitted) && (
-                  <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-900/60 text-xs space-y-2 animate-in fade-in duration-150">
-                    <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
-                      <Brain size={15} />
-                      <span>Biện luận lâm sàng & Cơ chế bệnh sinh:</span>
-                    </div>
-                    <p className="text-stone-700 dark:text-stone-300 leading-relaxed">
-                      {currentQ.explanation}
-                    </p>
-                    <div className="text-[11px] text-stone-500 dark:text-stone-400 italic pt-1 border-t border-emerald-200/60 dark:border-emerald-900/60">
-                      <strong>Tài liệu Y văn tham chiếu:</strong> {currentQ.reference}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom Nav Buttons for Questions */}
-              <div className="flex items-center justify-between pt-1">
-                <button
-                  onClick={() => setCurrentQuestionIndex((prev) => Math.max(prev - 1, 0))}
-                  disabled={currentQuestionIndex === 0}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-40 transition-colors"
-                >
-                  <ChevronLeft size={16} />
-                  <span>Câu trước</span>
-                </button>
-
-                <div className="flex items-center gap-2">
-                  {examMode === 'timed' && !isExamSubmitted && (
-                    <button
-                      onClick={handleSubmitExam}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm transition-all"
-                    >
-                      Nộp bài thi ({Object.keys(userAnswers).length}/{activeQuestions.length})
-                    </button>
-                  )}
-
-                  {isExamSubmitted && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-stone-100 dark:bg-stone-800 text-xs">
-                      <Award size={16} className="text-amber-500" />
-                      <span>
-                        Điểm số: <strong>{scoreResult.score}/{scoreResult.total}</strong> ({scoreResult.percentage}%)
-                      </span>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setCurrentQuestionIndex((prev) => Math.min(prev + 1, activeQuestions.length - 1))}
-                    disabled={currentQuestionIndex === activeQuestions.length - 1}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:opacity-90 disabled:opacity-40 transition-opacity"
-                  >
-                    <span>Câu tiếp theo</span>
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-            </div>
+            <QuestionBankTab onResolveApiCredentials={onResolveApiCredentials} />
           )}
 
           {/* TAB 2: VIRTUAL CLINICAL CASES */}
@@ -597,7 +280,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
               <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-500 text-white font-bold text-[10px]">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500 text-white font-bold text-[13px]">
                       {activeCase.difficulty}
                     </span>
                     <h3 className="text-sm font-bold text-stone-900 dark:text-stone-100">
@@ -646,25 +329,25 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                     <Heart size={15} />
                     <span>2. Dấu hiệu sinh tồn lúc vào viện</span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 font-mono text-[11px]">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 font-mono text-[14px]">
                     <div className="p-2 rounded-lg bg-stone-50 dark:bg-stone-800">
-                      <div className="text-stone-400 text-[10px]">Huyết áp</div>
+                      <div className="text-stone-400 text-[13px]">Huyết áp</div>
                       <div className="font-bold text-stone-800 dark:text-stone-200">{activeCase.vitalSigns.bloodPressure}</div>
                     </div>
                     <div className="p-2 rounded-lg bg-stone-50 dark:bg-stone-800">
-                      <div className="text-stone-400 text-[10px]">Mạch</div>
+                      <div className="text-stone-400 text-[13px]">Mạch</div>
                       <div className="font-bold text-stone-800 dark:text-stone-200">{activeCase.vitalSigns.heartRate} ck/p</div>
                     </div>
                     <div className="p-2 rounded-lg bg-stone-50 dark:bg-stone-800">
-                      <div className="text-stone-400 text-[10px]">Nhịp thở</div>
+                      <div className="text-stone-400 text-[13px]">Nhịp thở</div>
                       <div className="font-bold text-stone-800 dark:text-stone-200">{activeCase.vitalSigns.respiratoryRate} l/p</div>
                     </div>
                     <div className="p-2 rounded-lg bg-stone-50 dark:bg-stone-800">
-                      <div className="text-stone-400 text-[10px]">Nhiệt độ</div>
+                      <div className="text-stone-400 text-[13px]">Nhiệt độ</div>
                       <div className="font-bold text-stone-800 dark:text-stone-200">{activeCase.vitalSigns.temperature}°C</div>
                     </div>
                     <div className="p-2 rounded-lg bg-stone-50 dark:bg-stone-800">
-                      <div className="text-stone-400 text-[10px]">SpO2</div>
+                      <div className="text-stone-400 text-[13px]">SpO2</div>
                       <div className="font-bold text-stone-800 dark:text-stone-200">{activeCase.vitalSigns.spo2}%</div>
                     </div>
                   </div>
@@ -680,7 +363,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                     {!revealedCaseSteps.exam && (
                       <button
                         onClick={() => setRevealedCaseSteps((prev) => ({ ...prev, exam: true }))}
-                        className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold text-[11px] hover:bg-amber-500/20"
+                        className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold text-[14px] hover:bg-amber-500/20"
                       >
                         Mở kết quả khám
                       </button>
@@ -693,7 +376,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                       ))}
                     </ul>
                   ) : (
-                    <div className="text-stone-400 italic text-[11px]">
+                    <div className="text-stone-400 italic text-[14px]">
                       Hãy suy nghĩ xem bạn cần khám những triệu chứng thực thể nào ở bệnh nhân này trước khi mở kết quả!
                     </div>
                   )}
@@ -709,7 +392,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                     {!revealedCaseSteps.paraclinical && (
                       <button
                         onClick={() => setRevealedCaseSteps((prev) => ({ ...prev, paraclinical: true }))}
-                        className="px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 font-semibold text-[11px] hover:bg-purple-500/20"
+                        className="px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 font-semibold text-[14px] hover:bg-purple-500/20"
                       >
                         Đọc kết quả CLS
                       </button>
@@ -721,12 +404,12 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                         <div key={i} className="p-2.5 rounded-lg bg-stone-50 dark:bg-stone-850 border border-stone-200/60 dark:border-stone-700/60">
                           <div className="font-semibold text-stone-900 dark:text-stone-100">{para.name}</div>
                           <div className="text-emerald-700 dark:text-emerald-400 font-mono mt-0.5">{para.result}</div>
-                          <div className="text-[11px] text-stone-500 dark:text-stone-400 italic">{para.interpretation}</div>
+                          <div className="text-[14px] text-stone-500 dark:text-stone-400 italic">{para.interpretation}</div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-stone-400 italic text-[11px]">
+                    <div className="text-stone-400 italic text-[14px]">
                       Bạn sẽ chỉ định các xét nghiệm và chẩn đoán hình ảnh gì cho ca bệnh này?
                     </div>
                   )}
@@ -742,7 +425,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                     {!revealedCaseSteps.diagnosis && (
                       <button
                         onClick={() => setRevealedCaseSteps((prev) => ({ ...prev, diagnosis: true, treatment: true }))}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500 text-white font-semibold text-[11px] hover:bg-emerald-600"
+                        className="px-2.5 py-1 rounded-lg bg-emerald-500 text-white font-semibold text-[14px] hover:bg-emerald-600"
                       >
                         Xem chẩn đoán & phác đồ
                       </button>
@@ -892,7 +575,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                           <span className="font-bold text-stone-900 dark:text-stone-100">
                             Tổng điểm GCS: <span className="text-emerald-600 dark:text-emerald-400 text-base">{res.score}/15</span>
                           </span>
-                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[13px] ${
                             res.score >= 13 ? 'bg-emerald-500 text-white' : res.score >= 9 ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'
                           }`}>
                             {res.riskLevel === 'Thấp' ? 'Nhẹ' : res.riskLevel === 'Trung bình' ? 'Vừa' : 'Nặng / Hôn mê'}
@@ -945,7 +628,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                           <span className="font-bold text-stone-900 dark:text-stone-100">
                             Điểm CURB-65: <span className="text-emerald-600 dark:text-emerald-400 text-base">{res.score}/5</span>
                           </span>
-                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[13px] ${
                             res.score <= 1 ? 'bg-emerald-500 text-white' : res.score === 2 ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'
                           }`}>
                             {res.score <= 1 ? 'Ngoại trú' : res.score === 2 ? 'Nội trú khoa Hô hấp' : 'Cân nhắc ICU'}
@@ -1010,7 +693,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                           <span className="font-bold text-stone-900 dark:text-stone-100">
                             Điểm Alvarado: <span className="text-emerald-600 dark:text-emerald-400 text-base">{res.score}/10</span>
                           </span>
-                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[13px] ${
                             res.score <= 4 ? 'bg-emerald-500 text-white' : res.score <= 6 ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'
                           }`}>
                             {res.score <= 4 ? 'Ít nghĩ đến' : res.score <= 6 ? 'Theo dõi / CT' : 'Chỉ định mổ'}
@@ -1095,7 +778,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                           <span className="font-bold text-stone-900 dark:text-stone-100">
                             Điểm CHA2DS2-VASc: <span className="text-emerald-600 dark:text-emerald-400 text-base">{res.score} điểm</span>
                           </span>
-                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[13px] ${
                             res.riskLevel === 'Thấp' ? 'bg-emerald-500 text-white' : res.riskLevel === 'Trung bình' ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'
                           }`}>
                             {res.riskLevel === 'Thấp' ? 'Không cần kháng đông' : res.riskLevel === 'Trung bình' ? 'Cân nhắc kháng đông' : 'Chỉ định kháng đông bắt buộc'}
@@ -1146,7 +829,7 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                           <span className="font-bold text-stone-900 dark:text-stone-100">
                             Điểm qSOFA: <span className="text-emerald-600 dark:text-emerald-400 text-base">{res.score}/3</span>
                           </span>
-                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[13px] ${
                             res.score >= 2 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'
                           }`}>
                             {res.score >= 2 ? 'Cảnh báo SEPSIS nguy kịch' : 'Nguy cơ thấp'}
@@ -1180,10 +863,10 @@ Em xin Thầy/Cô đặt câu hỏi phản biện từng bước để em tập 
                 className="min-h-[220px] p-6 rounded-3xl bg-gradient-to-br from-white to-stone-50 dark:from-stone-900 dark:to-stone-850 border-2 border-dashed border-emerald-500/40 hover:border-emerald-500 cursor-pointer shadow-md flex flex-col justify-between transition-all select-none"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  <span className="text-[14px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                     {isCardFlipped ? 'Đáp án & Cơ chế' : 'Câu hỏi / Triệu chứng'}
                   </span>
-                  <span className="text-[10px] text-stone-400">Nhấn để lật thẻ</span>
+                  <span className="text-[13px] text-stone-400">Nhấn để lật thẻ</span>
                 </div>
 
                 <div className="my-auto py-4 text-center">

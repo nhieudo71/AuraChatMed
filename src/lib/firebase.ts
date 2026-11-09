@@ -2,6 +2,10 @@ import { initializeApp } from 'firebase/app';
 import {
   getAuth,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  setPersistence,
+  browserLocalPersistence,
   signOut,
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -22,6 +26,7 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { FAST_MODEL } from '../config/appConfig';
 import { ChatSession, ChatMessage } from '../types';
 
 export enum OperationType {
@@ -72,10 +77,73 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+/**
+ * Cấu hình Firebase.
+ *
+ * `firebase-applet-config.json` do Google AI Studio sinh ra và bị ràng buộc với
+ * sandbox của nền tảng (project, appId, databaseId). Để tách dự án ra chạy độc
+ * lập, mỗi trường dưới đây có thể ghi đè bằng biến môi trường `VITE_FIREBASE_*`;
+ * nếu không đặt thì dùng giá trị trong file JSON như cũ.
+ */
+const envAny = (): Record<string, string | undefined> =>
+  typeof import.meta !== 'undefined' && (import.meta as any).env
+    ? ((import.meta as any).env as Record<string, string | undefined>)
+    : {};
+
+const pickEnv = (key: string, fallback: string): string => {
+  const value = envAny()[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+};
+
+export const resolvedFirebaseConfig = {
+  projectId: pickEnv('VITE_FIREBASE_PROJECT_ID', firebaseConfig.projectId),
+  appId: pickEnv('VITE_FIREBASE_APP_ID', firebaseConfig.appId),
+  apiKey: pickEnv('VITE_FIREBASE_API_KEY', firebaseConfig.apiKey),
+  authDomain: pickEnv('VITE_FIREBASE_AUTH_DOMAIN', firebaseConfig.authDomain),
+  storageBucket: pickEnv('VITE_FIREBASE_STORAGE_BUCKET', firebaseConfig.storageBucket),
+  messagingSenderId: pickEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', firebaseConfig.messagingSenderId),
+  measurementId: pickEnv('VITE_FIREBASE_MEASUREMENT_ID', firebaseConfig.measurementId),
+};
+
+/** Database ID của Firestore; rỗng nghĩa là dùng database mặc định `(default)`. */
+export const firestoreDatabaseId = pickEnv(
+  'VITE_FIREBASE_FIRESTORE_DATABASE_ID',
+  firebaseConfig.firestoreDatabaseId
+);
+
 // Initialize Firebase
-export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const app = initializeApp(resolvedFirebaseConfig);
+export const db = firestoreDatabaseId
+  ? getFirestore(app, firestoreDatabaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
+
+/**
+ * Giữ phiên đăng nhập qua các lần mở lại trình duyệt và trên nhiều thiết bị.
+ * `browserLocalPersistence` là chế độ mặc định nhưng bị một số trình duyệt
+ * (chế độ riêng tư, chặn storage bên thứ ba) âm thầm hạ xuống chỉ-trong-phiên,
+ * khiến người dùng bị đăng xuất sau mỗi lần đóng tab. Đặt tường minh để biết
+ * ngay nếu môi trường không hỗ trợ.
+ */
+export const authPersistenceReady: Promise<void> = setPersistence(
+  auth,
+  browserLocalPersistence
+).catch((err) => {
+  console.warn('Không đặt được persistence lâu dài cho đăng nhập:', err);
+});
+
+/** Lỗi cần chuyển sang redirect thay vì popup. */
+function shouldFallbackToRedirect(err: any): boolean {
+  const code = String(err?.code || '');
+  return (
+    code === 'auth/popup-blocked' ||
+    code === 'auth/popup-closed-by-user' ||
+    code === 'auth/cancelled-popup-request' ||
+    code === 'auth/operation-not-supported-in-this-environment' ||
+    // Một số trình duyệt di động không cấp window.opener cho popup.
+    code === 'auth/web-storage-unsupported'
+  );
+}
 
 // Configure Google Auth Provider with Google Workspace Scopes
 export const googleProvider = new GoogleAuthProvider();
@@ -107,6 +175,8 @@ export async function testConnection(): Promise<boolean> {
 export async function signInWithGoogle(): Promise<{ user: User; accessToken: string }> {
   try {
     isSigningIn = true;
+    await authPersistenceReady;
+
     const result = await signInWithPopup(auth, googleProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
@@ -114,11 +184,38 @@ export async function signInWithGoogle(): Promise<{ user: User; accessToken: str
     }
     cachedAccessToken = credential.accessToken;
     return { user: result.user, accessToken: cachedAccessToken };
-  } catch (err) {
+  } catch (err: any) {
+    // Popup bị chặn là chuyện thường trên di động và trình duyệt chặn quảng
+    // cáo. Chuyển sang redirect để người dùng vẫn đăng nhập được.
+    if (shouldFallbackToRedirect(err)) {
+      console.warn('Popup bị chặn, chuyển sang đăng nhập bằng redirect:', err?.code);
+      await signInWithRedirect(auth, googleProvider);
+      // Trang sẽ được điều hướng đi; promise này không trả về giá trị.
+      return await new Promise<never>(() => {});
+    }
+
     console.error('Google Sign-In Error:', err);
     throw err;
   } finally {
     isSigningIn = false;
+  }
+}
+
+/**
+ * Hoàn tất đăng nhập khi quay về từ redirect.
+ * Trả về true nếu vừa xử lý xong một lượt redirect (đã đăng nhập).
+ */
+export async function completeRedirectSignIn(): Promise<boolean> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result) return false;
+
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    cachedAccessToken = credential?.accessToken ?? null;
+    return true;
+  } catch (err) {
+    console.error('Không hoàn tất được đăng nhập redirect:', err);
+    return false;
   }
 }
 
@@ -192,7 +289,7 @@ export function subscribeUserSessions(
           userId: data.userId,
           title: data.title,
           systemPrompt: data.systemPrompt,
-          model: data.model || 'gemini-3.8-flash',
+          model: data.model || FAST_MODEL,
           thinkingLevel: data.thinkingLevel || 'MEDIUM',
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,

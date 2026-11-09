@@ -160,7 +160,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Giọng đọc phản hồi (Text-to-Speech):
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-[11px] text-stone-500">Tự động đọc tin nhắn AI:</span>
+                <span className="text-[14px] text-stone-500">Tự động đọc tin nhắn AI:</span>
                 <input
                   type="checkbox"
                   checked={preferences.ttsAutoPlay || false}
@@ -171,7 +171,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] text-stone-500 mb-1">Chọn giọng đọc hệ thống:</label>
+              <label className="block text-[14px] text-stone-500 mb-1">Chọn giọng đọc hệ thống:</label>
               <select
                 value={preferences.ttsVoice || ''}
                 onChange={(e) => onUpdatePreferences({ ttsVoice: e.target.value })}
@@ -195,7 +195,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Khóa Gemini API tùy chỉnh (Người dùng nâng cao)
               </label>
             </div>
-            <p className="text-[11px] text-stone-500 dark:text-stone-400 leading-relaxed">
+            <p className="text-[14px] text-stone-500 dark:text-stone-400 leading-relaxed">
               Khóa API của bạn được mã hóa cục bộ bằng thuật toán <span className="font-medium text-stone-700 dark:text-stone-300">AES-GCM 256-bit</span> thông qua Web Crypto API. Khóa không bao giờ được lưu dưới dạng văn bản thô.
             </p>
 
@@ -207,7 +207,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <button
                   onClick={handleRemoveKey}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 text-[11px] font-medium transition-colors"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 text-[14px] font-medium transition-colors"
                 >
                   <Trash2 size={12} />
                   Xóa khóa
@@ -243,7 +243,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between pt-1">
-                  <span className="text-[10px] text-stone-400">
+                  <span className="text-[13px] text-stone-400">
                     Bỏ trống để sử dụng khóa mặc định được hệ thống cung cấp.
                   </span>
                   <button

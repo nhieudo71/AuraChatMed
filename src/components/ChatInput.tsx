@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ChatAttachment, ResponseStyleLevel } from '../types';
 import { formatFileSize } from '../utils/fileParser';
+import { THINKING_MODEL, TRANSCRIBE_MODEL } from '../config/appConfig';
 
 interface ChatInputProps {
   input: string;
@@ -121,10 +122,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         }`}
       >
         {/* Top Badges / Toggles Bar */}
-        <div className="flex items-center justify-between pb-2 mb-1.5 border-b border-stone-100 dark:border-stone-800/80 text-[11px] gap-2 flex-wrap">
+        <div className="flex items-center justify-between pb-2 mb-1.5 border-b border-stone-100 dark:border-stone-800/80 text-[14px] gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap">
             {/* Response Style Level (ChatGPT style: Ngắn gọn / Tiêu chuẩn / Chi tiết) */}
-            <div className="flex items-center rounded-xl bg-stone-100 dark:bg-stone-800/80 p-0.5 text-[11px] font-medium">
+            <div className="flex items-center rounded-xl bg-stone-100 dark:bg-stone-800/80 p-0.5 text-[14px] font-medium">
               <button
                 type="button"
                 onClick={() => onSelectResponseStyle('concise')}
@@ -170,7 +171,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <button
               type="button"
               onClick={onToggleSpeedMode}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[14px] font-medium transition-all cursor-pointer ${
                 speedMode
                   ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
                   : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
@@ -181,16 +182,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <span>{speedMode ? 'Siêu tốc (Bật)' : 'Siêu tốc'}</span>
             </button>
 
-            {/* Thinking Mode Toggle (gemini-4-argon with thinkingLevel: HIGH) */}
+            {/* Thinking Mode Toggle (uses THINKING_MODEL with thinkingLevel: HIGH) */}
             <button
               type="button"
               onClick={onToggleThinkingMode}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[14px] font-medium transition-all cursor-pointer ${
                 thinkingMode
                   ? 'bg-purple-500 text-white shadow-xs'
                   : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
               }`}
-              title="Kích hoạt tư duy logic chuyên sâu (gemini-4-argon)"
+              title={`Kích hoạt tư duy logic chuyên sâu (${THINKING_MODEL})`}
             >
               <Brain size={12} className={thinkingMode ? 'text-white' : 'text-purple-500'} />
               <span>{thinkingMode ? 'Tư duy sâu (Bật)' : 'Tư duy sâu'}</span>
@@ -200,7 +201,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <button
               type="button"
               onClick={onOpenSystemPrompt}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-colors cursor-pointer ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[14px] transition-colors cursor-pointer ${
                 hasSystemPrompt
                   ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-medium'
                   : 'text-stone-500 dark:text-stone-400 hover:text-stone-700'
@@ -211,7 +212,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </button>
           </div>
 
-          <span className="hidden sm:inline text-stone-400 text-[10px]">
+          <span className="hidden sm:inline text-stone-400 text-[13px]">
             Shift + Enter để xuống dòng
           </span>
         </div>
@@ -267,10 +268,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   )}
 
                   <div className="overflow-hidden">
-                    <div className="truncate font-medium text-[11px] max-w-[120px] sm:max-w-[160px]">
+                    <div className="truncate font-medium text-[14px] max-w-[120px] sm:max-w-[160px]">
                       {att.name}
                     </div>
-                    <div className="text-[9px] text-stone-400 font-mono">
+                    <div className="text-[12px] text-stone-400 font-mono">
                       {formatFileSize(att.size)}
                     </div>
                   </div>
@@ -310,7 +311,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           }
           rows={1}
           disabled={disabled}
-          className="w-full bg-transparent text-stone-900 dark:text-stone-100 placeholder:text-stone-400 text-[15px] resize-none focus:outline-none min-h-[44px] max-h-[180px] leading-relaxed py-1"
+          className="w-full bg-transparent text-stone-900 dark:text-stone-100 placeholder:text-stone-400 text-[18px] resize-none focus:outline-none min-h-[44px] max-h-[180px] leading-relaxed py-1"
         />
 
         {/* Bottom Actions Row */}
@@ -340,7 +341,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               type="button"
               onClick={onOpenVoiceModal}
               className="p-2 rounded-xl text-stone-500 dark:text-stone-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
-              title="Nhận diện giọng nói với gemini-3.5-transcribe"
+              title={`Nhận diện giọng nói với ${TRANSCRIBE_MODEL}`}
               aria-label="Nhập bằng giọng nói"
             >
               <Mic size={17} />

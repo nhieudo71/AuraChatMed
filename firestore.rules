@@ -2,13 +2,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny all access
+    // Mặc định chặn toàn bộ. Mọi collection phải được mở tường minh bên dưới.
     match /{document=**} {
       allow read, write: if false;
     }
 
+    // ==================== Helper ====================
+
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid is string && request.auth.uid.size() > 0;
     }
 
     function incoming() {
@@ -20,12 +22,34 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
     }
+
+    /**
+     * Chặn payload có quá nhiều field lạ (ghost fields gây phình dữ liệu).
+     * Lưu ý: `data.size()` đếm SỐ FIELD, không phải byte. Giới hạn độ dài từng
+     * chuỗi được kiểm riêng trong từng hàm isValid*.
+     */
+    function hasReasonableFieldCount(data, maxFields) {
+      return data.size() <= maxFields;
+    }
+
+    /** Chủ sở hữu phiên chat. Dùng cho thao tác trên tin nhắn con. */
+    function isSessionOwner(sessionId) {
+      return isSignedIn() &&
+        isValidId(sessionId) &&
+        exists(/databases/$(database)/documents/sessions/$(sessionId)) &&
+        get(/databases/$(database)/documents/sessions/$(sessionId)).data.userId == request.auth.uid;
+    }
+
+    // ==================== Hồ sơ người dùng ====================
 
     function isValidUserProfile(data) {
       return data.keys().hasAll(['userId', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['userId', 'displayName', 'email', 'theme', 'ttsVoice', 'encryptedApiKey', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'userId', 'displayName', 'email', 'theme', 'ttsVoice',
+          'encryptedApiKey', 'createdAt', 'updatedAt'
+        ]) &&
         data.userId is string && data.userId.size() <= 128 &&
         (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
         (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
@@ -33,68 +57,108 @@ service cloud.firestore {
         (!('ttsVoice' in data) || (data.ttsVoice is string && data.ttsVoice.size() <= 50)) &&
         (!('encryptedApiKey' in data) || (data.encryptedApiKey is string && data.encryptedApiKey.size() <= 500)) &&
         data.createdAt is string && data.createdAt.size() <= 50 &&
-        data.updatedAt is string && data.updatedAt.size() <= 50;
+        data.updatedAt is string && data.updatedAt.size() <= 50 &&
+        hasReasonableFieldCount(data, 12);
     }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      allow create: if isSignedIn() && isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming()) &&
+        incoming().userId == request.auth.uid;
+
+      allow update: if isSignedIn() && isValidId(userId) &&
+        request.auth.uid == userId &&
+        existing().userId == request.auth.uid &&
+        isValidUserProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt;
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    // ==================== Phiên trò chuyện ====================
 
     function isValidChatSession(data) {
       return data.keys().hasAll(['userId', 'title', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['userId', 'title', 'systemPrompt', 'model', 'thinkingLevel', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'userId', 'title', 'systemPrompt', 'model', 'thinkingLevel', 'createdAt', 'updatedAt'
+        ]) &&
         data.userId is string && data.userId.size() <= 128 &&
         data.title is string && data.title.size() <= 200 &&
         (!('systemPrompt' in data) || (data.systemPrompt is string && data.systemPrompt.size() <= 5000)) &&
         (!('model' in data) || (data.model is string && data.model.size() <= 100)) &&
         (!('thinkingLevel' in data) || (data.thinkingLevel is string && data.thinkingLevel.size() <= 50)) &&
         data.createdAt is string && data.createdAt.size() <= 50 &&
-        data.updatedAt is string && data.updatedAt.size() <= 50;
+        data.updatedAt is string && data.updatedAt.size() <= 50 &&
+        hasReasonableFieldCount(data, 12);
     }
 
-    function isValidChatMessage(data) {
-      return data.keys().hasAll(['sessionId', 'userId', 'role', 'content', 'createdAt']) &&
-        data.keys().hasOnly(['sessionId', 'userId', 'role', 'content', 'thinkingContent', 'createdAt']) &&
-        data.sessionId is string && data.sessionId.size() <= 128 &&
-        data.userId is string && data.userId.size() <= 128 &&
-        (data.role == 'user' || data.role == 'model' || data.role == 'system') &&
-        data.content is string && data.content.size() <= 25000 &&
-        (!('thinkingContent' in data) || (data.thinkingContent is string && data.thinkingContent.size() <= 25000)) &&
-        data.createdAt is string && data.createdAt.size() <= 50;
-    }
-
-    // User preferences & profile
-    match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
-      allow create: if isSignedIn() && isValidId(userId) && request.auth.uid == userId &&
-        isValidUserProfile(incoming()) && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(userId) && request.auth.uid == userId &&
-        isValidUserProfile(incoming()) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt;
-      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
-    }
-
-    // Chat sessions
     match /sessions/{sessionId} {
-      allow get: if isSignedIn() && isValidId(sessionId) && resource.data.userId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && isValidId(sessionId) &&
-        isValidChatSession(incoming()) && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(sessionId) && resource.data.userId == request.auth.uid &&
-        isValidChatSession(incoming()) && incoming().userId == existing().userId && incoming().createdAt == existing().createdAt;
-      allow delete: if isSignedIn() && isValidId(sessionId) && resource.data.userId == request.auth.uid;
+      // Truy vấn của ứng dụng luôn kèm where('userId','==',uid) nên có thể chứng minh.
+      allow get, list: if isSignedIn() && isValidId(sessionId) &&
+        existing().userId == request.auth.uid;
 
-      // Messages in a session
+      allow create: if isSignedIn() && isValidId(sessionId) &&
+        isValidChatSession(incoming()) &&
+        incoming().userId == request.auth.uid;
+
+      allow update: if isSignedIn() && isValidId(sessionId) &&
+        existing().userId == request.auth.uid &&
+        isValidChatSession(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt;
+
+      allow delete: if isSignedIn() && isValidId(sessionId) &&
+        existing().userId == request.auth.uid;
+
+      // ================== Tin nhắn trong phiên ==================
+
+      function isValidChatMessage(data) {
+        return data.keys().hasAll(['sessionId', 'userId', 'role', 'content', 'createdAt']) &&
+          data.keys().hasOnly([
+            'sessionId', 'userId', 'role', 'content', 'thinkingContent', 'createdAt'
+          ]) &&
+          data.sessionId is string && data.sessionId.size() <= 128 &&
+          data.userId is string && data.userId.size() <= 128 &&
+          (data.role == 'user' || data.role == 'model' || data.role == 'system') &&
+          data.content is string && data.content.size() <= 25000 &&
+          (!('thinkingContent' in data) || (data.thinkingContent is string && data.thinkingContent.size() <= 25000)) &&
+          data.createdAt is string && data.createdAt.size() <= 50 &&
+          hasReasonableFieldCount(data, 12);
+      }
+
       match /messages/{messageId} {
-        allow get: if isSignedIn() && isValidId(sessionId) && isValidId(messageId) && resource.data.userId == request.auth.uid;
-        allow list: if isSignedIn() && isValidId(sessionId) && resource.data.userId == request.auth.uid;
-        allow create: if isSignedIn() && isValidId(sessionId) && isValidId(messageId) &&
+        // Đọc dựa trên quyền sở hữu phiên cha, KHÔNG dựa vào trường userId của
+        // tin nhắn. Lý do: ứng dụng list tin nhắn chỉ với orderBy('createdAt'),
+        // không kèm where('userId') — nếu rule đòi userId, Firestore không thể
+        // chứng minh truy vấn an toàn và sẽ từ chối toàn bộ danh sách.
+        allow get, list: if isSignedIn() &&
+          isValidId(sessionId) && isValidId(messageId) &&
+          isSessionOwner(sessionId);
+
+        allow create: if isSignedIn() &&
+          isValidId(sessionId) && isValidId(messageId) &&
+          isSessionOwner(sessionId) &&
           isValidChatMessage(incoming()) &&
           incoming().userId == request.auth.uid &&
-          incoming().sessionId == sessionId &&
-          get(/databases/$(database)/documents/sessions/$(sessionId)).data.userId == request.auth.uid;
-        allow update: if isSignedIn() && isValidId(sessionId) && isValidId(messageId) &&
-          resource.data.userId == request.auth.uid &&
+          incoming().sessionId == sessionId;
+
+        allow update: if isSignedIn() &&
+          isValidId(sessionId) && isValidId(messageId) &&
+          isSessionOwner(sessionId) &&
+          existing().userId == request.auth.uid &&
           isValidChatMessage(incoming()) &&
           incoming().userId == existing().userId &&
           incoming().sessionId == existing().sessionId &&
           incoming().createdAt == existing().createdAt;
-        allow delete: if isSignedIn() && isValidId(sessionId) && isValidId(messageId) && resource.data.userId == request.auth.uid;
+
+        allow delete: if isSignedIn() &&
+          isValidId(sessionId) && isValidId(messageId) &&
+          isSessionOwner(sessionId) &&
+          existing().userId == request.auth.uid;
       }
     }
   }

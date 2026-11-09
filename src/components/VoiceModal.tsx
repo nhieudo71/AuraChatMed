@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Loader2, X, Check, RefreshCw } from 'lucide-react';
+import { TRANSCRIBE_MODEL } from '../config/appConfig';
 
 interface VoiceModalProps {
   isOpen: boolean;
@@ -149,7 +150,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
             Nhận diện giọng nói AI
           </h3>
           <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-            Được hỗ trợ bởi mô hình chuyên sâu <span className="font-semibold text-amber-500">gemini-3.5-transcribe</span>
+            Được hỗ trợ bởi mô hình chuyên sâu <span className="font-semibold text-amber-500">{TRANSCRIBE_MODEL}</span>
           </p>
         </div>
 

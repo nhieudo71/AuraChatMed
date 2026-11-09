@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {title || 'Cuộc trò chuyện mới'}
           </span>
           {activeProviderName && (
-            <span className="hidden lg:inline text-[10px] px-2 py-0.5 rounded-full bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium">
+            <span className="hidden lg:inline text-[13px] px-2 py-0.5 rounded-full bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium">
               {activeProviderName}
             </span>
           )}
