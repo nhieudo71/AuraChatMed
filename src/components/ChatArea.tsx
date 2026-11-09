@@ -14,9 +14,16 @@ import {
   BarChart3,
   Languages,
   Stethoscope,
+  FileText,
+  FileSpreadsheet,
+  File,
+  Film,
+  Image as ImageIcon,
+  ExternalLink,
 } from 'lucide-react';
-import { ChatMessage } from '../types';
+import { ChatMessage, ChatAttachment } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { formatFileSize } from '../utils/fileParser';
 
 interface ChatAreaProps {
   messages: ChatMessage[];
@@ -43,6 +50,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [expandedThinking, setExpandedThinking] = useState<{ [id: string]: boolean }>({});
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -102,80 +110,160 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     {
       title: 'Soạn thảo & Biên tập',
       desc: 'Viết bài thuyết trình hoặc thông cáo báo chí chuyên nghiệp',
-      prompt: 'Hãy soạn thảo một thông cáo ra mắt sản phẩm công nghệ mới đầy ấn tượng, lôi cuốn và súc tích.',
+      prompt: 'Hãy viết giúp tôi một bài thông cáo báo chí ra mắt tính năng AI mới, văn phong cuốn hút, chuyên nghiệp và có lời kêu gọi hành động (CTA) rõ ràng.',
       icon: PenTool,
-      color: 'text-amber-500 bg-amber-500/10',
+      color: 'text-purple-500 bg-purple-500/10',
     },
     {
       title: 'Phân tích & Lập kế hoạch',
       desc: 'Kế hoạch kinh doanh và phân bổ nguồn lực khả thi',
-      prompt: 'Hãy lập kế hoạch triển khai chiến lược kinh doanh cho một ứng dụng SaaS trong 6 tháng đầu tiên, kèm theo các chỉ số KPI cần theo dõi.',
+      prompt: 'Phân tích mô hình kinh doanh SaaS B2B tại thị trường Đông Nam Á: Phân tích SWOT, chi phí thu hút khách hàng (CAC), giá trị vòng đời (LTV) và chiến lược thâm nhập thị trường.',
       icon: BarChart3,
-      color: 'text-emerald-500 bg-emerald-500/10',
+      color: 'text-amber-500 bg-amber-500/10',
     },
     {
       title: 'Dịch thuật chuyên sâu',
       desc: 'Dịch tài liệu học thuật hoặc kỹ thuật chuẩn văn phong bản xứ',
-      prompt: 'Hãy phân tích và dịch các thuật ngữ chuyên ngành công nghệ AI mới nhất từ tiếng Anh sang tiếng Việt với chú giải dễ hiểu.',
+      prompt: 'Dịch bài viết học thuật này sang tiếng Anh tự nhiên, học thuật và chuẩn mực quốc tế.',
       icon: Languages,
-      color: 'text-purple-500 bg-purple-500/10',
+      color: 'text-rose-500 bg-rose-500/10',
     },
   ];
 
+  const renderAttachmentBadge = (att: ChatAttachment) => {
+    if (att.type === 'image' && (att.url || att.base64)) {
+      const src = att.url || `data:${att.mimeType};base64,${att.base64}`;
+      return (
+        <div
+          key={att.id}
+          className="relative group rounded-xl overflow-hidden border border-white/20 bg-black/10 cursor-pointer"
+          onClick={() => setPreviewImage(src)}
+        >
+          <img src={src} alt={att.name} className="w-28 h-28 object-cover transition-transform group-hover:scale-105" />
+          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-medium p-1 text-center truncate">
+            {att.name}
+          </div>
+        </div>
+      );
+    }
+
+    if (att.type === 'video' && (att.url || att.base64)) {
+      const src = att.url || `data:${att.mimeType};base64,${att.base64}`;
+      return (
+        <div key={att.id} className="rounded-xl overflow-hidden border border-white/20 bg-black/20 p-2 max-w-xs">
+          <div className="flex items-center gap-1.5 text-xs text-white mb-1 font-medium truncate">
+            <Film size={14} />
+            <span className="truncate">{att.name}</span>
+          </div>
+          <video src={src} controls className="w-full max-h-48 rounded-lg" />
+        </div>
+      );
+    }
+
+    // Documents (PDF, Word, Excel, PPTX, Text)
+    const isDocx = att.type === 'docx';
+    const isXlsx = att.type === 'xlsx';
+    const isPdf = att.type === 'pdf';
+    const isPptx = att.type === 'pptx';
+
+    return (
+      <div
+        key={att.id}
+        className="flex items-center gap-2 p-2.5 rounded-xl bg-white/15 backdrop-blur-xs border border-white/25 text-white max-w-xs transition-all hover:bg-white/20"
+      >
+        <div className={`p-2 rounded-lg shrink-0 ${
+          isPdf ? 'bg-rose-500/30 text-rose-100' :
+          isDocx ? 'bg-blue-500/30 text-blue-100' :
+          isXlsx ? 'bg-emerald-500/30 text-emerald-100' :
+          isPptx ? 'bg-orange-500/30 text-orange-100' :
+          'bg-stone-500/30 text-stone-100'
+        }`}>
+          {isPdf ? <FileText size={18} /> :
+           isDocx ? <FileText size={18} /> :
+           isXlsx ? <FileSpreadsheet size={18} /> :
+           <File size={18} />}
+        </div>
+        <div className="overflow-hidden text-left flex-1">
+          <div className="text-xs font-semibold truncate leading-tight">{att.name}</div>
+          <div className="text-[10px] opacity-80 mt-0.5 flex items-center gap-1.5">
+            <span className="uppercase font-mono">{att.type}</span>
+            <span>•</span>
+            <span>{formatFileSize(att.size)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
+    <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6">
+      {/* Lightbox for Image Preview */}
+      {previewImage && (
+        <div
+          onClick={() => setPreviewImage(null)}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer animate-in fade-in"
+        >
+          <img src={previewImage} alt="Xem ảnh phóng to" className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain" />
+        </div>
+      )}
+
       <div className="max-w-3xl mx-auto space-y-6">
-        {/* Welcome Empty State */}
-        {messages.length === 0 && !isStreaming ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-in fade-in duration-300">
-            <div className="space-y-3">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center shadow-xs">
+        {/* Welcome State when no messages */}
+        {messages.length === 0 && (
+          <div className="py-8 sm:py-12 space-y-8 animate-in fade-in duration-300">
+            {/* Header branding */}
+            <div className="text-center space-y-3">
+              <div className="inline-flex p-3 rounded-2xl bg-amber-500/10 text-amber-500 shadow-sm ring-1 ring-amber-500/20">
                 <Sparkles size={28} />
               </div>
-              <h2 className="text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-stone-900 dark:text-stone-100">
                 AuraChat AI
               </h2>
               <p className="text-sm text-stone-500 dark:text-stone-400 max-w-md mx-auto leading-relaxed">
-                Trợ lý AI thông minh phong cách tối giản. Hỗ trợ truyền phát thời gian thực, suy nghĩ logic chuyên sâu, nhận diện giọng nói và tích hợp Google Workspace.
+                Trợ lý AI thông minh phong cách tối giản. Tốc độ phản hồi tức thì, đọc đa tài liệu (PDF, Word, Excel, PPTX, Ảnh, Video) và tùy chọn cấp độ trả lời ngắn gọn / chi tiết.
               </p>
             </div>
 
-            {/* System prompt banner if present */}
-            {systemPrompt && systemPrompt.trim() && (
-              <div className="p-3 max-w-lg mx-auto rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
-                <span className="font-semibold">Đang kích hoạt ngữ cảnh riêng: </span>
-                <span className="italic">"{systemPrompt.slice(0, 80)}..."</span>
+            {/* Active System Prompt Banner */}
+            {systemPrompt && (
+              <div className="p-3.5 rounded-2xl bg-stone-100/80 dark:bg-stone-850 border border-stone-200/80 dark:border-stone-800 text-xs text-stone-600 dark:text-stone-300 flex items-center gap-2 max-w-xl mx-auto">
+                <span className="font-semibold text-stone-900 dark:text-stone-100 shrink-0">
+                  Đang kích hoạt ngữ cảnh riêng:
+                </span>
+                <span className="truncate italic">"{systemPrompt}"</span>
               </div>
             )}
 
-            {/* Prompt Starters Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-2xl text-left pb-4">
-              {starterPrompts.map((starter, i) => {
-                const Icon = starter.icon;
+            {/* Starter Suggestion Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {starterPrompts.map((item, idx) => {
+                const IconComponent = item.icon;
                 return (
                   <button
-                    key={i}
-                    onClick={() => onSelectStarterPrompt(starter.prompt)}
-                    className="p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 dark:border-stone-800 bg-white/70 dark:bg-stone-900/60 hover:border-amber-500/40 hover:bg-white dark:hover:bg-stone-850 hover:shadow-xs transition-all group cursor-pointer"
+                    key={idx}
+                    onClick={() => onSelectStarterPrompt(item.prompt)}
+                    className="flex flex-col text-left p-4 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-amber-500/50 hover:shadow-xs transition-all duration-200 group cursor-pointer"
                   >
-                    <div className="flex items-center gap-2.5 mb-1.5">
-                      <div className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl ${starter.color}`}>
-                        <Icon size={15} />
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className={`p-2 rounded-xl ${item.color}`}>
+                        <IconComponent size={18} />
                       </div>
-                      <span className="text-xs font-semibold text-stone-900 dark:text-stone-100 group-hover:text-amber-600 dark:group-hover:text-amber-400">
-                        {starter.title}
+                      <span className="font-bold text-xs sm:text-sm text-stone-900 dark:text-stone-100 group-hover:text-amber-500 transition-colors">
+                        {item.title}
                       </span>
                     </div>
-                    <p className="text-[11px] sm:text-xs text-stone-500 dark:text-stone-400 line-clamp-2 leading-relaxed">
-                      {starter.desc}
+                    <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed line-clamp-2">
+                      {item.desc}
                     </p>
                   </button>
                 );
               })}
             </div>
           </div>
-        ) : (
-          /* Message List */
+        )}
+
+        {/* Messages List */}
+        {messages.length > 0 && (
           <div className="space-y-6">
             {messages.map((msg) => {
               const isUser = msg.role === 'user';
@@ -195,8 +283,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <div className={`flex flex-col max-w-[88%] sm:max-w-[80%] ${isUser ? 'items-end' : 'items-start'}`}>
                     {/* User Message Bubble */}
                     {isUser ? (
-                      <div className="px-4 py-3 rounded-2xl rounded-tr-xs bg-amber-500 text-white text-[15px] leading-relaxed shadow-xs selection:bg-amber-600 selection:text-white whitespace-pre-wrap">
-                        {msg.content}
+                      <div className="px-4 py-3 rounded-2xl rounded-tr-xs bg-amber-500 text-white text-[15px] leading-relaxed shadow-xs selection:bg-amber-600 selection:text-white space-y-2">
+                        {/* Attached files preview */}
+                        {msg.attachments && msg.attachments.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pb-1">
+                            {msg.attachments.map((att) => renderAttachmentBadge(att))}
+                          </div>
+                        )}
+                        {msg.content && (
+                          <div className="whitespace-pre-wrap">{msg.content}</div>
+                        )}
                       </div>
                     ) : (
                       /* AI Message Container */
@@ -206,7 +302,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-850/40 overflow-hidden text-xs">
                             <button
                               onClick={() => toggleThinking(msg.id)}
-                              className="w-full flex items-center justify-between px-3 py-2 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition-colors"
+                              className="w-full flex items-center justify-between px-3 py-2 text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition-colors cursor-pointer"
                             >
                               <div className="flex items-center gap-1.5 font-medium">
                                 <Brain size={14} className="text-amber-500" />
@@ -231,7 +327,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <div className="flex items-center gap-1.5 pt-1 text-stone-400">
                           <button
                             onClick={() => handleCopy(msg.id, msg.content)}
-                            className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-200 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 dark:hover:text-stone-200 transition-colors cursor-pointer"
                             title="Sao chép"
                             aria-label="Sao chép câu trả lời"
                           >
@@ -239,7 +335,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           </button>
                           <button
                             onClick={() => handleSpeak(msg.id, msg.content)}
-                            className={`p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors ${
+                            className={`p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer ${
                               speakingId === msg.id ? 'text-amber-500' : 'hover:text-stone-600 dark:hover:text-stone-200'
                             }`}
                             title={speakingId === msg.id ? 'Dừng đọc' : 'Đọc bằng giọng nói'}
@@ -261,35 +357,43 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               );
             })}
 
-            {/* Currently Streaming Message */}
+            {/* In-Flight Streaming Message */}
             {isStreaming && (
               <div className="flex gap-3.5 justify-start animate-in fade-in duration-100">
-                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs animate-pulse">
                   <Sparkles size={16} />
                 </div>
-                <div className="flex-1 max-w-[88%] sm:max-w-[80%] space-y-2">
+
+                <div className="flex flex-col max-w-[88%] sm:max-w-[80%] items-start w-full space-y-2">
+                  {/* Streaming Thinking Content */}
                   {streamingThinking && (
-                    <div className="p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 text-xs text-amber-800 dark:text-amber-300 font-mono">
-                      <div className="flex items-center gap-1.5 font-semibold mb-1">
-                        <Brain size={14} className="animate-pulse text-amber-500" />
-                        <span>Đang suy luận logic...</span>
+                    <div className="w-full rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-stone-600 dark:text-stone-300 font-mono leading-relaxed">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 mb-1.5">
+                        <Brain size={14} className="animate-spin" />
+                        <span>Đang suy luận logic chuyên sâu...</span>
                       </div>
-                      <div className="text-[12px] opacity-80 whitespace-pre-wrap line-clamp-3">
-                        {streamingThinking}
-                      </div>
+                      <div className="whitespace-pre-wrap">{streamingThinking}</div>
                     </div>
                   )}
 
-                  <div className="px-1 text-stone-900 dark:text-stone-100">
-                    <MarkdownRenderer content={streamingMessage} />
-                    <span className="inline-block w-2 h-4 ml-1 bg-amber-500 animate-pulse rounded-xs" />
+                  {/* Streaming Text Content */}
+                  <div className="px-1 text-stone-900 dark:text-stone-100 w-full">
+                    {streamingMessage ? (
+                      <MarkdownRenderer content={streamingMessage} />
+                    ) : (
+                      <div className="flex items-center gap-2 text-stone-400 text-xs py-2">
+                        <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                        <span>AI đang phản hồi với tốc độ cao...</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             )}
+
+            <div ref={bottomRef} />
           </div>
         )}
-        <div ref={bottomRef} className="h-4" />
       </div>
     </div>
   );

@@ -24,6 +24,9 @@ export function formatConversationAsMarkdown(title: string, messages: ChatMessag
   for (const msg of messages) {
     const roleName = msg.role === 'user' ? 'Người dùng' : msg.role === 'model' ? 'Aura AI' : 'Hệ thống';
     output += `### ${roleName} (${new Date(msg.createdAt).toLocaleTimeString()})\n\n`;
+    if (msg.attachments && msg.attachments.length > 0) {
+      output += `📎 *Tệp đính kèm: ${msg.attachments.map((a) => a.name).join(', ')}*\n\n`;
+    }
     if (msg.thinkingContent) {
       output += `<details>\n<summary>Quá trình suy nghĩ</summary>\n\n${msg.thinkingContent}\n\n</details>\n\n`;
     }

@@ -1,3 +1,14 @@
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  type: 'image' | 'video' | 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'text';
+  mimeType: string;
+  size: number;
+  url?: string;
+  base64?: string;
+  extractedText?: string;
+}
+
 export interface ChatMessage {
   id: string;
   sessionId: string;
@@ -5,6 +16,7 @@ export interface ChatMessage {
   role: 'user' | 'model' | 'system';
   content: string;
   thinkingContent?: string;
+  attachments?: ChatAttachment[];
   createdAt: string;
 }
 
@@ -30,6 +42,8 @@ export interface CustomProviderConfig {
   updatedAt: string;
 }
 
+export type ResponseStyleLevel = 'concise' | 'balanced' | 'detailed';
+
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   ttsVoice?: string;
@@ -41,6 +55,8 @@ export interface UserPreferences {
   activeProviderId?: string; // id of CustomProviderConfig (LLM) or 'default'
   activeTtsProviderId?: string; // id of CustomProviderConfig (TTS) or 'default'
   activeImageProviderId?: string; // id of CustomProviderConfig (Image/Video) or 'default'
+  responseStyle?: ResponseStyleLevel; // Cấp độ trả lời: Ngắn gọn (concise), Tiêu chuẩn (balanced), Chi tiết (detailed)
+  speedMode?: boolean; // Tăng tốc độ phản hồi tối đa
 }
 
 export interface APIBackupPayload {

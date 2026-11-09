@@ -332,12 +332,31 @@ export async function handleChatStream(req: Request, res: Response) {
     thinkingMode,
     customApiKey,
     customBaseUrl,
-  } = req.body;
+    responseStyle,
+    speedMode,
+  } = req.body || {};
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
+
+  // Build effective system instructions including responseStyle directives
+  let effectiveSystemPrompt = (systemPrompt && typeof systemPrompt === 'string') ? systemPrompt.trim() : '';
+
+  if (responseStyle === 'concise') {
+    effectiveSystemPrompt += (effectiveSystemPrompt ? '\n\n' : '') +
+      `[QUY TẮC CẤP ĐỘ PHẢN HỒI: CỰC KỲ NGẮN GỌN (CONCISE - ĐI THẲNG TRỌNG TÂM)]
+- Trả lời cực kỳ ngắn gọn, đi thẳng vào câu trả lời, tuyệt đối KHÔNG viết dài dòng.
+- Không mở bài chào hỏi hay kết luận thừa thãi.
+- Sử dụng các gạch đầu dòng rõ ràng, súc tích (ưu tiên dưới 3-5 gạch đầu dòng hoặc 1-2 đoạn văn ngắn).
+- Tối ưu hóa để người dùng đọc nhanh nhất mà vẫn nắm trọn vẹn thông tin cốt lõi.`;
+  } else if (responseStyle === 'detailed') {
+    effectiveSystemPrompt += (effectiveSystemPrompt ? '\n\n' : '') +
+      `[QUY TẮC CẤP ĐỘ PHẢN HỒI: CHI TIẾT CHUYÊN SÂU (DETAILED)]
+- Trình bày toàn diện, phân tích sâu mọi khía cạnh, có ví dụ minh họa và giải thích cặn kẽ nguyên lý nền tảng.`;
+  }
 
   try {
     // 1. If user provided a custom OpenAI-compatible base URL (like Groq, DeepSeek, OpenRouter, Ollama, etc.)
@@ -348,16 +367,24 @@ export async function handleChatStream(req: Request, res: Response) {
         : `${cleanBaseUrl}/chat/completions`;
 
       const formattedMessages: any[] = [];
-      if (systemPrompt && typeof systemPrompt === 'string' && systemPrompt.trim()) {
-        formattedMessages.push({ role: 'system', content: systemPrompt.trim() });
+      if (effectiveSystemPrompt) {
+        formattedMessages.push({ role: 'system', content: effectiveSystemPrompt });
       }
 
       if (Array.isArray(messages)) {
         for (const m of messages) {
-          if (!m.content) continue;
+          let textContent = m.content || '';
+          if (Array.isArray(m.attachments)) {
+            for (const att of m.attachments) {
+              if (att.extractedText) {
+                textContent = `[Tài liệu đính kèm: "${att.name}"]\n${att.extractedText}\n[Hết nội dung "${att.name}"]\n\n` + textContent;
+              }
+            }
+          }
+          if (!textContent) continue;
           formattedMessages.push({
             role: m.role === 'user' ? 'user' : 'assistant',
-            content: m.content,
+            content: textContent,
           });
         }
       }
@@ -414,6 +441,7 @@ export async function handleChatStream(req: Request, res: Response) {
               const reasoningChunk = delta?.reasoning_content || '';
               if (textChunk || reasoningChunk) {
                 res.write(`data: ${JSON.stringify({ text: textChunk, thinking: reasoningChunk })}\n\n`);
+                (res as any).flush?.();
               }
             } catch (e) {}
           }
@@ -428,30 +456,65 @@ export async function handleChatStream(req: Request, res: Response) {
     // 2. Default: Google Gemini via @google/genai SDK
     const ai = getAIClient(customApiKey);
 
-    // Selected model: if thinkingMode is enabled, use 'gemini-4-argon' with ThinkingLevel.HIGH
-    const targetModel = thinkingMode ? 'gemini-4-argon' : (model || 'gemini-3.8-flash');
+    // Selected model: if thinkingMode is enabled and speedMode is not forced, use 'gemini-4-argon'
+    // Immediate connection heartbeat to unblock browser & client proxies
+    res.write(': ping\n\n');
+    (res as any).flush?.();
+
+    // Selected model: if thinkingMode is enabled and speedMode is not forced, use 'gemini-4-argon'
+    const targetModel = (thinkingMode && !speedMode) ? 'gemini-4-argon' : (model || 'gemini-3.8-flash');
 
     const config: any = {};
-    if (systemPrompt && typeof systemPrompt === 'string' && systemPrompt.trim()) {
-      config.systemInstruction = systemPrompt.trim();
+    if (effectiveSystemPrompt) {
+      config.systemInstruction = effectiveSystemPrompt;
     }
 
-    if (thinkingMode || targetModel === 'gemini-4-argon') {
+    if (speedMode || (!thinkingMode && responseStyle === 'concise')) {
+      // Zero-wait speed: explicitly disable thinking budget to avoid pre-computation delay
       config.thinkingConfig = {
+        thinkingBudget: 0,
+      };
+    } else if (thinkingMode && targetModel === 'gemini-4-argon') {
+      config.thinkingConfig = {
+        includeThoughts: true,
         thinkingLevel: ThinkingLevel.HIGH,
       };
-      // Note: As per instruction, do NOT set maxOutputTokens
     }
 
-    // Convert conversation messages to Gemini contents structure
+    // Convert conversation messages to Gemini contents structure with multimodal attachment support
     const contents: any[] = [];
     if (Array.isArray(messages)) {
       for (const m of messages) {
-        if (!m.content) continue;
-        contents.push({
-          role: m.role === 'user' ? 'user' : 'model',
-          parts: [{ text: m.content }],
-        });
+        const parts: any[] = [];
+
+        // Attachments: Images, Videos, PDFs, Word, Excel, PPTX, Text
+        if (Array.isArray(m.attachments)) {
+          for (const att of m.attachments) {
+            if (att.base64 && (att.type === 'image' || att.type === 'video' || att.type === 'pdf')) {
+              parts.push({
+                inlineData: {
+                  mimeType: att.mimeType,
+                  data: att.base64,
+                },
+              });
+            } else if (att.extractedText) {
+              parts.push({
+                text: `[Nội dung tài liệu đính kèm: "${att.name}" (${att.type.toUpperCase()})]\n${att.extractedText}\n[Hết nội dung "${att.name}"]\n`,
+              });
+            }
+          }
+        }
+
+        if (m.content) {
+          parts.push({ text: m.content });
+        }
+
+        if (parts.length > 0) {
+          contents.push({
+            role: m.role === 'user' ? 'user' : 'model',
+            parts,
+          });
+        }
       }
     }
 
@@ -469,12 +532,20 @@ export async function handleChatStream(req: Request, res: Response) {
     });
 
     for await (const chunk of stream) {
-      const candidate = chunk.candidates?.[0];
-      const part = candidate?.content?.parts?.[0];
-      const text = chunk.text || (part && 'text' in part ? part.text : '');
-
-      if (text) {
-        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+      const parts = chunk.candidates?.[0]?.content?.parts;
+      if (Array.isArray(parts) && parts.length > 0) {
+        for (const p of parts) {
+          if ((p as any).thought) {
+            res.write(`data: ${JSON.stringify({ thinking: p.text || '' })}\n\n`);
+            (res as any).flush?.();
+          } else if (p.text) {
+            res.write(`data: ${JSON.stringify({ text: p.text })}\n\n`);
+            (res as any).flush?.();
+          }
+        }
+      } else if (chunk.text) {
+        res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+        (res as any).flush?.();
       }
     }
 
@@ -482,7 +553,27 @@ export async function handleChatStream(req: Request, res: Response) {
     res.end();
   } catch (err: any) {
     console.error('Chat stream error:', err);
-    res.write(`data: ${JSON.stringify({ error: err.message || 'Lỗi khi gọi mô hình AI' })}\n\n`);
+    let friendlyError = err.message || 'Lỗi khi kết nối tới mô hình AI';
+    try {
+      if (friendlyError.includes('{')) {
+        const parsed = JSON.parse(friendlyError);
+        const nestedMsg = parsed?.error?.message || parsed?.message;
+        if (nestedMsg) {
+          try {
+            const doubleParsed = JSON.parse(nestedMsg);
+            friendlyError = doubleParsed?.error?.message || nestedMsg;
+          } catch {
+            friendlyError = nestedMsg;
+          }
+        }
+      }
+    } catch {}
+
+    if (friendlyError.includes('high demand') || friendlyError.includes('503') || friendlyError.includes('UNAVAILABLE')) {
+      friendlyError = 'Máy chủ AI đang có lượng truy cập lớn (503). Vui lòng thử lại sau giây lát hoặc sử dụng chế độ Siêu tốc.';
+    }
+
+    res.write(`data: ${JSON.stringify({ error: friendlyError })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
   }

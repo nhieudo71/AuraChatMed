@@ -16,9 +16,10 @@ import {
   deleteSessionFromFirestore,
   saveMessage,
 } from './lib/firebase';
-import { ChatSession, ChatMessage, UserPreferences, CustomProviderConfig } from './types';
+import { ChatSession, ChatMessage, UserPreferences, CustomProviderConfig, ChatAttachment, ResponseStyleLevel } from './types';
 import { generateChatTitle } from './utils/chatUtils';
 import { decryptApiKey } from './utils/crypto';
+import { processUploadedFile } from './utils/fileParser';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
@@ -47,6 +48,10 @@ export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  // Attachments & file processing
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
 
   // UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -99,6 +104,8 @@ export default function App() {
       theme: 'system',
       language: 'vi',
       ttsAutoPlay: false,
+      responseStyle: 'concise',
+      speedMode: true,
     };
   });
 
@@ -340,10 +347,45 @@ export default function App() {
     }
   };
 
+  // File attachment handlers
+  const handleAddFiles = async (fileList: FileList | File[]) => {
+    setIsProcessingFile(true);
+    try {
+      const files = Array.from(fileList);
+      const parsedAttachments: ChatAttachment[] = [];
+      for (const f of files) {
+        const parsed = await processUploadedFile(f);
+        parsedAttachments.push(parsed);
+      }
+      setAttachments((prev) => [...prev, ...parsedAttachments]);
+    } catch (err: any) {
+      console.error('File parsing error:', err);
+      alert('Không thể đọc tệp: ' + (err.message || 'Lỗi không xác định'));
+    } finally {
+      setIsProcessingFile(false);
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const handleSelectResponseStyle = (style: ResponseStyleLevel) => {
+    handleUpdatePreferences({ responseStyle: style });
+  };
+
+  const handleToggleSpeedMode = () => {
+    handleUpdatePreferences({ speedMode: !(preferences.speedMode ?? true) });
+  };
+
   // Send Message with Real-Time SSE Streaming
   const handleSendMessage = async (textToSend?: string) => {
     const promptText = (textToSend || input).trim();
-    if (!promptText || isStreaming) return;
+    const hasAttachments = attachments.length > 0;
+    if ((!promptText && !hasAttachments) || isStreaming) return;
+
+    const effectiveText = promptText || (hasAttachments ? 'Vui lòng đọc và phân tích tài liệu đính kèm.' : '');
+    const currentAttachments = [...attachments];
 
     let currentSessionId = activeSessionId;
     let isBrandNew = false;
@@ -353,7 +395,7 @@ export default function App() {
       const newSession: ChatSession = {
         id: 'session_' + Date.now(),
         userId: user ? user.uid : 'local_user',
-        title: generateChatTitle(promptText),
+        title: generateChatTitle(effectiveText),
         model: thinkingMode ? 'gemini-4-argon' : 'gemini-3.8-flash',
         thinkingLevel: thinkingMode ? 'HIGH' : 'MEDIUM',
         createdAt: new Date().toISOString(),
@@ -366,7 +408,7 @@ export default function App() {
       if (user) saveSession(newSession);
     } else if (messages.length === 0) {
       // First message in existing session -> update title
-      const newTitle = generateChatTitle(promptText);
+      const newTitle = generateChatTitle(effectiveText);
       handleUpdateSessionTitle(currentSessionId, newTitle);
     }
 
@@ -375,13 +417,15 @@ export default function App() {
       sessionId: currentSessionId,
       userId: user ? user.uid : 'local_user',
       role: 'user',
-      content: promptText,
+      content: effectiveText,
+      attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
       createdAt: new Date().toISOString(),
     };
 
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInput('');
+    setAttachments([]);
 
     // Persist user message
     if (user) {
@@ -425,12 +469,15 @@ export default function App() {
           messages: updatedMessages.map((m) => ({
             role: m.role,
             content: m.content,
+            attachments: m.attachments,
           })),
           systemPrompt: activeSession?.systemPrompt || '',
           model: targetModel,
           thinkingMode,
           customApiKey: decryptedKey,
           customBaseUrl: targetBaseUrl,
+          responseStyle: preferences.responseStyle || 'concise',
+          speedMode: preferences.speedMode ?? true,
         }),
       });
 
@@ -621,6 +668,14 @@ export default function App() {
           onOpenVoiceModal={() => setIsVoiceOpen(true)}
           onOpenSystemPrompt={() => setIsSystemPromptOpen(true)}
           hasSystemPrompt={!!(activeSession?.systemPrompt && activeSession.systemPrompt.trim())}
+          attachments={attachments}
+          onAddFiles={handleAddFiles}
+          onRemoveAttachment={handleRemoveAttachment}
+          isProcessingFile={isProcessingFile}
+          responseStyle={preferences.responseStyle || 'concise'}
+          onSelectResponseStyle={handleSelectResponseStyle}
+          speedMode={preferences.speedMode ?? true}
+          onToggleSpeedMode={handleToggleSpeedMode}
         />
 
         {/* Mobile-first Bottom Navigation Bar (Hidden on sm screens and up) */}
