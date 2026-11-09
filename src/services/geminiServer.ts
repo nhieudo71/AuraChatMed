@@ -43,13 +43,34 @@ function sendJson(res: any, status: number, data: any) {
 }
 
 /**
+ * Làm sạch khóa người dùng dán vào: hay bị dính khoảng trắng, xuống dòng khi
+ * copy nhiều dòng, ký tự vô hình (zero-width), dấu nháy, hoặc cả tiền tố
+ * "Bearer " khi sao chép từ tài liệu. Gửi nguyên trạng sẽ bị 401 mà không rõ lý do.
+ */
+function sanitizeApiKey(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/[​-‍﻿]/g, '') // ký tự vô hình
+    .trim()
+    .replace(/^["'`]|["'`]$/g, '')
+    .replace(/^Bearer\s+/i, '')
+    .trim();
+}
+
+/**
  * Phân loại lỗi 401/403: đây không phải lúc nào cũng là "sai API Key".
  * Khi tài khoản hết credit / chạm hạn mức chi tiêu, provider vẫn trả 403 nhưng
  * khóa hoàn toàn đúng. Đổ lỗi cho key khiến người dùng đi tìm sai hướng.
  */
-function describeAuthError(status: number, rawMessage?: string): string {
+function describeAuthError(
+  status: number,
+  rawMessage?: string,
+  context?: { hasKey?: boolean; baseUrl?: string }
+): string {
   const msg = (rawMessage || '').trim();
   const low = msg.toLowerCase();
+  const hasKey = context?.hasKey !== false;
+  const host = context?.baseUrl ? safeHost(context.baseUrl) : '';
 
   const isCreditIssue =
     /spending limit|used all available credits|purchase more credits|insufficient_quota|quota exceeded|billing|credit balance|out of credits|exceeded your current quota/.test(
@@ -65,11 +86,39 @@ function describeAuthError(status: number, rawMessage?: string): string {
     return `Dịch vụ đang giới hạn số lần gọi (mã ${status}). Đợi khoảng 1 phút rồi thử lại. Chi tiết: ${msg}`;
   }
 
+  // Lỗi không kèm thông điệp rất hay gặp khi request hoàn toàn không có khóa.
+  const noBody = !msg || /^HTTP \d{3}$/.test(msg);
+
+  if (!hasKey) {
+    return `Chưa có API Key nào được gửi tới ${host || 'dịch vụ'} (mã ${status}). Hãy nhập khóa cho dịch vụ này trong mục API Keys — mã 401 xuất hiện vì yêu cầu đi mà không kèm khóa.`;
+  }
+
+  if (status === 401 && noBody) {
+    return `Dịch vụ ${host || ''} từ chối khóa (mã 401) nhưng không trả về thông điệp giải thích. Ba nguyên nhân thường gặp: (1) khóa thuộc dịch vụ khác — kiểm tra Base URL có khớp nhà cung cấp cấp khóa không; (2) khóa đã bị thu hồi hoặc chưa được kích hoạt; (3) dịch vụ cần scheme xác thực riêng thay vì "Bearer". Hãy tạo khóa mới ở trang quản trị của ${host || 'nhà cung cấp'} rồi dán lại.`;
+  }
+
   if (status === 403) {
     return `Dịch vụ từ chối quyền truy cập (mã 403). API Key có thể chưa được cấp quyền cho mô hình này, hoặc khóa bị khóa/hết hạn. Chi tiết: ${msg}`;
   }
 
   return `API Key không hợp lệ hoặc đã bị thu hồi (mã ${status}). Kiểm tra lại khóa đã dán, hoặc tạo khóa mới. Chi tiết: ${msg}`;
+}
+
+/** Lấy tên miền để thông báo lỗi nêu đúng dịch vụ, không lộ toàn bộ URL. */
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url.replace(/^https?:\/\//, '').split('/')[0];
+  }
+}
+
+/** Header xác thực chuẩn OpenAI; bỏ hẳn nếu không có khóa thay vì gửi "Bearer ". */
+function authHeaders(apiKey?: string): Record<string, string> {
+  const key = sanitizeApiKey(apiKey);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (key) headers['Authorization'] = `Bearer ${key}`;
+  return headers;
 }
 
 /**
@@ -138,7 +187,8 @@ export async function handleFetchModels(req: Request, res: Response) {
       cleanBaseUrl = cleanBaseUrl.slice(0, -'/chat/completions'.length).replace(/\/+$/, '');
     }
 
-    const cleanApiKey = (apiKey && typeof apiKey === 'string' && apiKey.trim()) || process.env.GEMINI_API_KEY || '';
+    const cleanApiKey =
+      sanitizeApiKey(apiKey) || (!cleanBaseUrl ? sanitizeApiKey(process.env.GEMINI_API_KEY) : '');
 
     // 1. If it's Google Gemini API
     if (cleanBaseUrl.includes('googleapis.com')) {
@@ -158,12 +208,9 @@ export async function handleFetchModels(req: Request, res: Response) {
 
     // 2. Candidate URLs for OpenAI-compatible and Ollama endpoints
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...authHeaders(cleanApiKey),
       'User-Agent': 'AuraChat/1.0',
     };
-    if (cleanApiKey) {
-      headers['Authorization'] = `Bearer ${cleanApiKey}`;
-    }
 
     const candidates: string[] = [];
     if (cleanBaseUrl.endsWith('/models')) {
@@ -240,7 +287,12 @@ export async function handleTestModel(req: Request, res: Response) {
   try {
     const { baseUrl, apiKey, model, category } = req.body || {};
     const cleanBaseUrl = (baseUrl || '').trim().replace(/\/+$/, '');
-    const cleanApiKey = (apiKey && apiKey.trim()) || process.env.GEMINI_API_KEY || '';
+    // Chỉ dùng khóa trong .env khi KHÔNG có Base URL, tức là đang gọi Google
+    // Gemini. Trước đây khóa Gemini bị gửi kèm cả khi người dùng cấu hình một
+    // dịch vụ khác — dịch vụ đó thấy khóa lạ nên trả 401, còn người dùng thì
+    // tưởng khóa mình vừa dán sai.
+    const typedKey = sanitizeApiKey(apiKey);
+    const cleanApiKey = typedKey || (!cleanBaseUrl ? sanitizeApiKey(process.env.GEMINI_API_KEY) : '');
 
     if (!cleanBaseUrl && !cleanApiKey) {
       return sendJson(res, 400, { success: false, error: 'Thiếu thông tin kết nối dịch vụ' });
@@ -283,10 +335,9 @@ export async function handleTestModel(req: Request, res: Response) {
         .replace(/\/models$/, '')
         .replace(/\/+$/, '');
 
-      const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (cleanApiKey) authHeaders['Authorization'] = `Bearer ${cleanApiKey}`;
+      const probeHeaders = authHeaders(cleanApiKey);
 
-      const probe = await fetchSafeJson(`${baseForModels}/models`, authHeaders);
+      const probe = await fetchSafeJson(`${baseForModels}/models`, probeHeaders);
 
       if (probe.ok && probe.data) {
         const latencyMs = Date.now() - startTime;
@@ -305,7 +356,12 @@ export async function handleTestModel(req: Request, res: Response) {
 
       // Sai khóa/chưa cấp quyền/hết credit: kết luận ngay, không cần sinh thử.
       if (probe.status === 401 || probe.status === 403) {
-        throw new Error(describeAuthError(probe.status, probe.error));
+        throw new Error(
+          describeAuthError(probe.status, probe.error, {
+            hasKey: Boolean(cleanApiKey),
+            baseUrl: cleanBaseUrl,
+          })
+        );
       }
 
       // 404/405: endpoint không có /models -> mới gửi sinh thử.
@@ -318,12 +374,7 @@ export async function handleTestModel(req: Request, res: Response) {
         endpoint = `${endpoint}/chat/completions`;
       }
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (cleanApiKey) {
-        headers['Authorization'] = `Bearer ${cleanApiKey}`;
-      }
+      const headers: Record<string, string> = authHeaders(cleanApiKey);
 
       const payload = {
         model: model || DEFAULT_CUSTOM_LLM_MODEL,
@@ -368,8 +419,7 @@ export async function handleTestModel(req: Request, res: Response) {
 
     // Category: Voice TTS
     if (category === 'tts') {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (cleanApiKey) headers['Authorization'] = `Bearer ${cleanApiKey}`;
+      const headers: Record<string, string> = authHeaders(cleanApiKey);
       if (cleanBaseUrl.includes('elevenlabs.io') && cleanApiKey) {
         headers['xi-api-key'] = cleanApiKey;
       }
@@ -384,6 +434,14 @@ export async function handleTestModel(req: Request, res: Response) {
       const resp = await fetch(testUrl, { headers, signal: AbortSignal.timeout(10000) });
       const latencyMs = Date.now() - startTime;
       if (!resp.ok) {
+        if (resp.status === 401 || resp.status === 403) {
+          throw new Error(
+            describeAuthError(resp.status, await resp.text(), {
+              hasKey: Boolean(cleanApiKey),
+              baseUrl: cleanBaseUrl,
+            })
+          );
+        }
         throw new Error(`Kiểm tra Voice TTS thất bại (Mã HTTP ${resp.status})`);
       }
       return sendJson(res, 200, {
@@ -491,12 +549,7 @@ export async function handleChatStream(req: Request, res: Response) {
         stream_options: { include_usage: true },
       };
 
-      const customHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (customApiKey && customApiKey.trim()) {
-        customHeaders['Authorization'] = `Bearer ${customApiKey.trim()}`;
-      }
+      const customHeaders: Record<string, string> = authHeaders(customApiKey);
 
       const compatStartedAt = Date.now();
       let upstreamResp = await fetch(endpoint, {
@@ -527,7 +580,10 @@ export async function handleChatStream(req: Request, res: Response) {
         // 401/403 thường bị hiểu nhầm là sai khóa; hết credit cũng trả 403.
         const friendly =
           upstreamResp.status === 401 || upstreamResp.status === 403
-            ? describeAuthError(upstreamResp.status, errorText)
+            ? describeAuthError(upstreamResp.status, errorText, {
+                hasKey: Boolean(sanitizeApiKey(customApiKey)),
+                baseUrl: endpoint,
+              })
             : `Custom Provider (${upstreamResp.status}): ${errorText.slice(0, 200)}`;
         res.write(`data: ${JSON.stringify({ error: friendly })}\n\n`);
         res.write('data: [DONE]\n\n');
