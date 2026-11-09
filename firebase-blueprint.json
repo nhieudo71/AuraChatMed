@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile settings including preferences and encrypted API key",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "theme": { "type": "string", "maxLength": 20 },
+        "ttsVoice": { "type": "string", "maxLength": 50 },
+        "encryptedApiKey": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "createdAt", "updatedAt"]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "An AI chat session with title, system prompt, model choice and timestamps",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "systemPrompt": { "type": "string", "maxLength": 5000 },
+        "model": { "type": "string", "maxLength": 100 },
+        "thinkingLevel": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "title", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A single chat message belonging to a session",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["user", "model", "system"] },
+        "content": { "type": "string", "maxLength": 25000 },
+        "thinkingContent": { "type": "string", "maxLength": 25000 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["sessionId", "userId", "role", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores individual user preferences, custom settings, and encrypted credentials."
+    },
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/ChatSession" },
+      "description": "Stores user chat sessions, system instructions, and configuration."
+    },
+    "/sessions/{sessionId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Stores messages within a specific chat session."
+    }
+  }
+}

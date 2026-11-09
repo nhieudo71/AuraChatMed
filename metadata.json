@@ -1,0 +1,8 @@
+{
+  "name": "AuraChat AI - Trợ Lý AI Tối Giản Đa Năng",
+  "description": "Ứng dụng chat AI thông minh phong cách tối giản hỗ trợ đồng bộ Firebase, Workspace, xuất đa định dạng PDF/Word/Excel/PPTX/MD, voice STT/TTS và tư duy logic cao cấp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
