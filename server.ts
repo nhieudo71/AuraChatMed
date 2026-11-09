@@ -1,31 +1,19 @@
-import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { handleChatStream, handleTranscribeAudio, handleFetchModels, handleTestModel } from './src/services/geminiServer';
-import { SERVER_PORT } from './src/config/serverConfig';
+import { startServer } from './src/server/app';
+import { SERVER_PORT, SERVER_HOST } from './src/config/serverConfig';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-const port = SERVER_PORT;
+const server = await startServer(path.join(__dirname, 'dist'), SERVER_PORT, SERVER_HOST);
 
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+console.log(`Server listening on ${server.url}`);
 
-// API endpoints
-app.post('/api/chat/stream', (req, res) => handleChatStream(req, res));
-app.post('/api/transcribe', (req, res) => handleTranscribeAudio(req, res));
-app.post('/api/models/fetch', (req, res) => handleFetchModels(req, res));
-app.post('/api/models/test', (req, res) => handleTestModel(req, res));
+const shutdown = async () => {
+  await server.close();
+  process.exit(0);
+};
 
-// Serve static frontend in production
-app.use(express.static(path.join(__dirname, 'dist')));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

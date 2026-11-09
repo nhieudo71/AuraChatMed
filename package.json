@@ -1,16 +1,20 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "start": "tsx server.ts",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist server.js dist-electron release",
     "lint": "tsc --noEmit",
-    "test": "node --test --import tsx src/**/*.test.ts"
+    "test": "node --test --import tsx src/**/*.test.ts",
+    "electron:build-main": "node scripts/build-electron-main.mjs",
+    "electron:dev": "npm run build && npm run electron:build-main && electron .",
+    "electron:dist": "npm run build && npm run electron:build-main && electron-builder --win nsis portable"
   },
   "dependencies": {
     "@google/genai": "^3.0.0",
@@ -39,10 +43,46 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "vite-plugin-pwa": "^2.0.0"
+  },
+  "build": {
+    "appId": "com.aurachat.ai",
+    "productName": "AuraChat AI",
+    "copyright": "Copyright © 2026 AuraChat AI",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "${productName}-${version}-${arch}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-${arch}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AuraChat AI"
+    }
   }
 }
